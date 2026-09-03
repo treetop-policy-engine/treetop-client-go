@@ -10,7 +10,7 @@ library.
 
 | Go client | Treetop REST contract | Minimum Go | Status |
 | --- | --- | --- | --- |
-| `v0.2.x` (unreleased) | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.25.13 | Builder, input-spec, and typed construction APIs |
+| `v0.2.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.25.13 | Current builder, input-spec, and typed construction APIs |
 | `v0.1.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Opaque request-domain API |
 | `v0.0.1` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Initial API; superseded by `v0.1.x` |
 
@@ -42,7 +42,7 @@ does not constitute a compatibility guarantee.
 go get github.com/treetop-policy-engine/treetop-client-go
 ```
 
-The unreleased module line declares Go 1.25.13 as its minimum version so supported builds contain
+The v0.2.x module line declares Go 1.25.13 as its minimum version so supported builds contain
 the standard-library security fixes required by its HTTP and TLS call paths.
 
 ## Quick start

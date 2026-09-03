@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-03
+
 ### Added
 
 - Add `RequestBuilder` and `RequestInput` construction boundaries that return validated `Request`
@@ -87,6 +89,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Refuse credentials over remote plaintext HTTP by default, omit access credentials from public
   probes and OpenAPI retrieval, deny redirects, and redact reflected credentials from API errors.
 
-[Unreleased]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/treetop-policy-engine/treetop-client-go/releases/tag/v0.0.1
