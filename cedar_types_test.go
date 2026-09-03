@@ -154,7 +154,7 @@ func TestRequestDomainValuesAreImmutable(t *testing.T) {
 		t.Fatal(err)
 	}
 	attrs := map[string]treetop.AttrValue{"owner": treetop.StringValue("alice")}
-	resource, err := treetop.NewResource(resourceType, "doc-42", treetop.ResourceWithAttributes(attrs))
+	resource, err := treetop.NewResourceWithType(resourceType, "doc-42", treetop.ResourceWithAttributes(attrs))
 	if err != nil {
 		t.Fatal(err)
 	}

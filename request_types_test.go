@@ -45,6 +45,7 @@ func TestConstructorsRejectUnsafeValues(t *testing.T) {
 	}{
 		{"quoted user", func() error { _, err := NewUser(`bad"id`); return err }},
 		{"reserved namespace", func() error { _, err := NewNamespace("__cedar"); return err }},
+		{"reserved Cedar keyword", func() error { _, err := NewNamespace("if"); return err }},
 		{"invalid resource kind", func() error { _, err := NewEntityType("not-a-kind"); return err }},
 		{"invalid IP", func() error { _, err := IPValue("999.1.1.1"); return err }},
 		{"control in request ID", func() error { return WithRequestID("bad\nid")(&AuthRequest{}) }},
@@ -65,8 +66,12 @@ func TestJSONDecodingRequiresRequestDomainFields(t *testing.T) {
 		decode func() error
 	}{
 		{"group ID", func() error { var value Group; return json.Unmarshal([]byte(`{"namespace":[]}`), &value) }},
+		{"group namespace", func() error { var value Group; return json.Unmarshal([]byte(`{"id":"admins"}`), &value) }},
 		{"user ID", func() error { var value User; return json.Unmarshal([]byte(`{"namespace":[],"groups":[]}`), &value) }},
+		{"user namespace", func() error { var value User; return json.Unmarshal([]byte(`{"id":"alice","groups":[]}`), &value) }},
+		{"user groups", func() error { var value User; return json.Unmarshal([]byte(`{"id":"alice","namespace":[]}`), &value) }},
 		{"action ID", func() error { var value Action; return json.Unmarshal([]byte(`{"namespace":[]}`), &value) }},
+		{"action namespace", func() error { var value Action; return json.Unmarshal([]byte(`{"id":"view"}`), &value) }},
 		{"resource kind", func() error { var value Resource; return json.Unmarshal([]byte(`{"id":"one"}`), &value) }},
 		{"resource ID", func() error { var value Resource; return json.Unmarshal([]byte(`{"kind":"Document"}`), &value) }},
 		{"empty optional request ID", func() error {
@@ -158,6 +163,43 @@ func TestAttrValueRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEmptySetUsesArrayAndNullAttributesAreRejected(t *testing.T) {
+	data, err := json.Marshal(SetValue())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), `{"type":"Set","value":[]}`; got != want {
+		t.Fatalf("empty set wire format = %s, want %s", got, want)
+	}
+
+	for _, kind := range []AttrType{AttrTypeString, AttrTypeBool, AttrTypeLong, AttrTypeIP, AttrTypeSet} {
+		t.Run(string(kind), func(t *testing.T) {
+			for _, value := range []string{"null", "missing"} {
+				input := `{"type":"` + string(kind) + `","value":null}`
+				if value == "missing" {
+					input = `{"type":"` + string(kind) + `"}`
+				}
+				var decoded AttrValue
+				var validation *ValidationError
+				if err := json.Unmarshal([]byte(input), &decoded); !errors.As(err, &validation) {
+					t.Errorf("%s value: got %T %v, want *ValidationError", value, err, err)
+				}
+			}
+		})
+	}
+}
+
+func TestUserInGroupsAcceptsMultipleAndComposes(t *testing.T) {
+	user, err := NewUser("alice", UserInGroups("admins", "operators"), UserWithGroupNames("auditors"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := user.Groups()
+	if len(groups) != 3 || groups[0].ID() != "admins" || groups[1].ID() != "operators" || groups[2].ID() != "auditors" {
+		t.Fatalf("unexpected groups: %#v", groups)
+	}
+}
+
 func testRequest(t *testing.T) Request {
 	t.Helper()
 	user, err := NewUser("alice", UserWithGroupNames("admins"))
@@ -168,7 +210,7 @@ func testRequest(t *testing.T) Request {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource, err := NewResource(testEntityType(t, "Document"), "doc-42", ResourceWithAttribute("owner", StringValue("alice")))
+	resource, err := NewResource("Document", "doc-42", ResourceWithAttribute("owner", StringValue("alice")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,15 +219,6 @@ func testRequest(t *testing.T) Request {
 		t.Fatal(err)
 	}
 	return request
-}
-
-func testEntityType(t *testing.T, value string) EntityType {
-	t.Helper()
-	entityType, err := NewEntityType(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return entityType
 }
 
 func testNamespace(t *testing.T, segments ...string) Namespace {

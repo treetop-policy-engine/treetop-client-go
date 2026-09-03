@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.23.x", stable]
+        go-version: ["1.25.13", stable]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -40,4 +40,55 @@ jobs:
       - run: git diff --exit-code
       - run: go vet ./...
       - run: go test -race -cover ./...
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - run: govulncheck ./...
       - run: npx --yes markdownlint-cli2@0.20.0 --config .markdownlint.json "**/*.md"
+
+  container-e2e:
+    name: Treetop REST v0.0.15 container E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TREETOP_E2E_CONTAINER: treetop-client-go-e2e
+      # v0.0.15 from the canonical ghcr.io/treetop-policy-engine/treetop-rest package.
+      TREETOP_E2E_IMAGE: ghcr.io/treetop-policy-engine/treetop-rest@sha256:5248a54f6dc124f344fdc159419a09d714982115478542f2a4f1e59c32cc6fc4
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.25.13"
+          check-latest: true
+      - name: Start pinned Treetop container
+        shell: bash
+        run: |
+          docker run --detach --name "$TREETOP_E2E_CONTAINER" \
+            --publish 127.0.0.1::9999 \
+            --env RUST_LOG=warn \
+            --env TREETOP_LISTEN=0.0.0.0 \
+            --env TREETOP_ALLOW_UPLOAD=true \
+            --env TREETOP_ACCESS_TOKENS=treetop-client-e2e \
+            "$TREETOP_E2E_IMAGE"
+
+          port="$(docker port "$TREETOP_E2E_CONTAINER" 9999/tcp | tail -n 1)"
+          for _ in {1..30}; do
+            if curl --fail --silent "http://$port/livez" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent "http://$port/livez" >/dev/null
+
+          upload_token="$(docker logs "$TREETOP_E2E_CONTAINER" 2>&1 | jq --raw-output \
+            'select(.fields.message == "Uploads enabled") | .fields.token' | tail -n 1)"
+          test -n "$upload_token"
+          echo "::add-mask::$upload_token"
+          {
+            echo "TREETOP_E2E_URL=http://$port"
+            echo "TREETOP_E2E_ACCESS_TOKEN=treetop-client-e2e"
+            echo "TREETOP_E2E_UPLOAD_TOKEN=$upload_token"
+          } >> "$GITHUB_ENV"
+      - name: Test client against Treetop
+        run: go test -tags=integration -run '^TestTreetopContainerCompatibility$' ./...
+      - name: Stop Treetop container
+        if: always()
+        run: docker rm --force "$TREETOP_E2E_CONTAINER" || true

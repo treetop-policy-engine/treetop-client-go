@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 )
 
 // Uploader is a capability-scoped client for policy, schema, and bundle
@@ -81,7 +83,7 @@ func (u *Uploader) UploadPolicies(ctx context.Context, cedar string) (*PoliciesM
 	if err := validateRawBody(int64(len(cedar)), u.client.maxRequestBytes); err != nil {
 		return nil, err
 	}
-	return u.post(ctx, "policies", "text/plain", []byte(cedar))
+	return u.postReader(ctx, "policies", "text/plain", strings.NewReader(cedar))
 }
 
 // UploadPoliciesJSON replaces policies using the JSON wrapper
@@ -101,7 +103,7 @@ func (u *Uploader) UploadSchema(ctx context.Context, schema string) (*PoliciesMe
 	if err := validateRawBody(int64(len(schema)), u.client.maxRequestBytes); err != nil {
 		return nil, err
 	}
-	return u.post(ctx, "schema", "text/plain", []byte(schema))
+	return u.postReader(ctx, "schema", "text/plain", strings.NewReader(schema))
 }
 
 // UploadSchemaJSON replaces the Cedar schema using the JSON wrapper
@@ -146,8 +148,12 @@ func (u *Uploader) post(ctx context.Context, path, contentType string, body []by
 }
 
 func (u *Uploader) postEncoded(ctx context.Context, path, contentType string, body []byte) (*PoliciesMetadata, error) {
+	return u.postReader(ctx, path, contentType, bytes.NewReader(body))
+}
+
+func (u *Uploader) postReader(ctx context.Context, path, contentType string, body io.Reader) (*PoliciesMetadata, error) {
 	response, err := u.client.send(ctx, requestSpec{
-		method: http.MethodPost, url: u.client.endpoint(path), body: bytes.NewReader(body),
+		method: http.MethodPost, url: u.client.endpoint(path), body: body,
 		contentType: contentType, accept: "application/json", protected: true, uploadToken: &u.token,
 	})
 	if err != nil {

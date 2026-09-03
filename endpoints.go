@@ -241,7 +241,7 @@ func (c *Client) validateAuthorization(request *AuthorizeRequest) error {
 }
 
 func (c *Client) postAuthorization(ctx context.Context, detail string, request *AuthorizeRequest, target any) error {
-	body, err := encodeJSONBounded(request, c.maxRequestBytes)
+	body, err := encodeJSONBounded(toAuthorizeRequestWire(request), c.maxRequestBytes)
 	if err != nil {
 		return err
 	}

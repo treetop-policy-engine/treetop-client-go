@@ -94,8 +94,9 @@ func (c *Client) endpoint(path string) *url.URL {
 
 func (c *Client) rootEndpoint(path string) *url.URL {
 	result := *c.baseURL
-	result.Path = strings.TrimSuffix(c.baseURL.Path, "/") + "/" + strings.TrimPrefix(path, "/")
-	result.RawPath = ""
+	relative := strings.TrimPrefix(path, "/")
+	result.Path = strings.TrimSuffix(c.baseURL.Path, "/") + "/" + relative
+	result.RawPath = strings.TrimSuffix(c.baseURL.EscapedPath(), "/") + "/" + escapePath(relative)
 	result.RawQuery = ""
 	result.Fragment = ""
 	return &result
@@ -110,8 +111,9 @@ func (c *Client) userPoliciesEndpoint(user string) (*url.URL, error) {
 	}
 	result := c.endpoint("policies/")
 	basePath := strings.TrimSuffix(result.Path, "/")
+	baseRawPath := strings.TrimSuffix(result.EscapedPath(), "/")
 	result.Path = basePath + "/" + user
-	result.RawPath = escapePath(basePath) + "/" + url.PathEscape(user)
+	result.RawPath = baseRawPath + "/" + url.PathEscape(user)
 	return result, nil
 }
 
@@ -133,7 +135,9 @@ func parseBaseURL(value string) (*url.URL, error) {
 		return nil, &ConfigurationError{Message: "base URL must not contain a query string or fragment"}
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/"
-	parsed.RawPath = ""
+	if parsed.RawPath != "" {
+		parsed.RawPath = strings.TrimRight(parsed.RawPath, "/") + "/"
+	}
 	return parsed, nil
 }
 

@@ -187,7 +187,7 @@ func WithCorrelationID(id string) Option {
 }
 
 // WithRootCAPEM adds one or more PEM-encoded root CA certificates to the
-// system trust pool used by a standard HTTP transport.
+// existing trust pool, or the system trust pool when none is configured.
 func WithRootCAPEM(pem []byte) Option {
 	return func(config *clientConfig) error {
 		if len(pem) == 0 {
@@ -264,7 +264,9 @@ func buildHTTPClient(config clientConfig) (*http.Client, error) {
 		if !customClient || config.maxIdleChanged {
 			transport.MaxIdleConnsPerHost = config.maxIdleConnsPerHost
 		}
-		transport.ForceAttemptHTTP2 = true
+		if !customClient {
+			transport.ForceAttemptHTTP2 = true
+		}
 		if len(config.rootCAPEM) != 0 || config.skipTLSVerify {
 			tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 			if transport.TLSClientConfig != nil {
@@ -274,9 +276,15 @@ func buildHTTPClient(config clientConfig) (*http.Client, error) {
 				}
 			}
 			if len(config.rootCAPEM) != 0 {
-				roots, err := x509.SystemCertPool()
-				if err != nil || roots == nil {
-					roots = x509.NewCertPool()
+				var roots *x509.CertPool
+				if tlsConfig.RootCAs != nil {
+					roots = tlsConfig.RootCAs.Clone()
+				} else {
+					var err error
+					roots, err = x509.SystemCertPool()
+					if err != nil || roots == nil {
+						roots = x509.NewCertPool()
+					}
 				}
 				for _, pem := range config.rootCAPEM {
 					if !roots.AppendCertsFromPEM(pem) {

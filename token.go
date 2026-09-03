@@ -2,6 +2,7 @@ package treetop
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -122,12 +123,27 @@ func validHeaderValue(value string) bool {
 }
 
 func redactSecrets(message string, secrets ...[]byte) string {
+	values := make([]string, 0, len(secrets))
+	seen := make(map[string]struct{}, len(secrets))
 	for _, secret := range secrets {
-		if len(secret) != 0 {
-			message = strings.ReplaceAll(message, string(secret), redacted)
+		value := string(secret)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; !exists {
+			values = append(values, value)
+			seen[value] = struct{}{}
 		}
 	}
-	return message
+	sort.Slice(values, func(i, j int) bool { return len(values[i]) > len(values[j]) })
+	replacements := make([]string, 0, len(values)*2)
+	for _, value := range values {
+		replacements = append(replacements, value, redacted)
+	}
+	if len(replacements) == 0 {
+		return message
+	}
+	return strings.NewReplacer(replacements...).Replace(message)
 }
 
 var _ fmt.Stringer = AccessToken{}
