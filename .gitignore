@@ -1,0 +1,4 @@
+/coverage.out
+/treetop-client-go.test
+*.prof
+*.test
