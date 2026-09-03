@@ -84,6 +84,11 @@ func (c *Client) decodeJSON(response *http.Response, target any, uploadToken *Up
 		}
 		return fmt.Errorf("treetop: decode trailing response JSON: %w", err)
 	}
+	if validator, ok := target.(responseValidator); ok {
+		if err := validator.validateResponse(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -132,7 +137,7 @@ func (c *Client) apiError(response *http.Response, uploadToken *UploadToken) err
 	}
 	return &APIError{
 		StatusCode: response.StatusCode,
-		Code:       envelope.Code,
+		Code:       redactSecrets(envelope.Code, secrets...),
 		Message:    redactSecrets(message, secrets...),
 		Details:    envelope.Details,
 	}
@@ -160,7 +165,9 @@ func readBounded(response *http.Response, limit int64) ([]byte, error) {
 
 func encodeJSONBounded(value any, limit int64) ([]byte, error) {
 	buffer := &limitedBuffer{limit: limit}
-	if err := json.NewEncoder(buffer).Encode(value); err != nil {
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
 		if errors.Is(err, errSizeLimit) {
 			return nil, &RequestTooLargeError{Limit: limit}
 		}

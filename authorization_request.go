@@ -2,7 +2,9 @@ package treetop
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 )
 
 // AuthRequest augments a Request with an optional response-correlation ID and
@@ -264,15 +266,27 @@ func (r *AuthorizeRequest) validateLimits(limits RequestLimits) error {
 		if depth > limits.MaxContextDepth {
 			return &ValidationError{Field: fmt.Sprintf("requests[%d].context", i), Value: fmt.Sprint(depth), Rule: fmt.Sprintf("nesting exceeds depth %d", limits.MaxContextDepth)}
 		}
-		encoded, err := json.Marshal(request.context)
+		encoded, err := encodeJSONBounded(toAttrMapWire(request.context), boundedJSONLimit(limits.MaxContextBytes))
 		if err != nil {
+			var tooLarge *RequestTooLargeError
+			if errors.As(err, &tooLarge) {
+				return &ValidationError{Field: fmt.Sprintf("requests[%d].context", i), Rule: fmt.Sprintf("exceeds %d bytes", limits.MaxContextBytes)}
+			}
 			return fmt.Errorf("encode requests[%d].context: %w", i, err)
 		}
-		if int64(len(encoded)) > limits.MaxContextBytes {
-			return &ValidationError{Field: fmt.Sprintf("requests[%d].context", i), Value: fmt.Sprintf("%d bytes", len(encoded)), Rule: fmt.Sprintf("exceeds %d bytes", limits.MaxContextBytes)}
+		encodedBytes := len(encoded) - 1 // json.Encoder.Encode appends one newline.
+		if int64(encodedBytes) > limits.MaxContextBytes {
+			return &ValidationError{Field: fmt.Sprintf("requests[%d].context", i), Value: fmt.Sprintf("%d bytes", encodedBytes), Rule: fmt.Sprintf("exceeds %d bytes", limits.MaxContextBytes)}
 		}
 	}
 	return nil
+}
+
+func boundedJSONLimit(limit int64) int64 {
+	if limit < math.MaxInt64 {
+		return limit + 1
+	}
+	return limit
 }
 
 func attrDepth(root AttrValue) int {

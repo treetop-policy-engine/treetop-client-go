@@ -123,6 +123,8 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
 
 ## Commits, pull requests, and releases
 
+- Prepare changes on a branch and open a pull request; do not commit directly to `main` unless
+  explicitly instructed otherwise.
 - Keep commits focused and use imperative subjects under 72 characters.
 - Sign commits and release tags. Do not bypass configured signing.
 - Merge pull requests with squash merge. Do not use merge commits or rebase merges on `main`.

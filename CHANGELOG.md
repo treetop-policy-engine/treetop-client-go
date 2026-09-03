@@ -7,6 +7,45 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Add `RequestBuilder` and `RequestInput` construction boundaries that return validated `Request`
+  values and aggregate independent field failures in `RequestBuildError`.
+- Add `UserInGroups` for concise multi-group user construction, with composable membership options.
+- Add a digest-pinned Treetop REST v0.0.15 container E2E test covering authenticated status,
+  uploads, multi-group authorization, and user-policy listing.
+- Add `govulncheck` to CI so reachable dependency and standard-library vulnerabilities fail builds.
+- Add authorization request encoding benchmarks for single, medium, and maximum-default batches.
+
+### Changed
+
+- **Breaking:** raise the minimum Go version from 1.23 to 1.25.13 so the client's reachable HTTP,
+  TLS, X.509, URL, ASN.1, and PEM paths include current standard-library security fixes. Users must
+  upgrade their Go toolchain before adopting this client line.
+- **Breaking:** change `NewResource` to accept a qualified entity-type string directly. Callers
+  with an existing `EntityType` must use `NewResourceWithType`.
+- Make `UserWithGroups`, `UserWithGroupNames`, and `UserInGroups` additive so membership options
+  compose in declaration order.
+- Match `DefaultRequestLimits` to the server's 1,024-item default batch limit and retain the
+  unknown batch limit only when decoding legacy status responses.
+- Encode validated authorization requests through plain wire values to avoid repeated nested
+  validation and JSON marshaling work, and stream raw string uploads without a `[]byte` copy.
+- Preserve caller-supplied HTTP/2 transport preferences and escaped base URL path prefixes.
+- Reject all Cedar reserved words in namespace segments and resource entity types.
+
+### Fixed
+
+- Encode empty Cedar sets as JSON arrays and reject missing or null attribute values.
+- Require namespace and group arrays when decoding request-domain JSON.
+- Reject successful structured responses that omit required Treetop fields or contain inconsistent
+  metadata, status, download, or user-policy shapes.
+- Extend custom TLS root pools instead of replacing them with the system pool.
+
+### Security
+
+- Redact overlapping access and upload tokens in longest-match order and redact tokens reflected in
+  both API error messages and codes.
+
 ## [0.1.0] - 2026-09-03
 
 ### Added

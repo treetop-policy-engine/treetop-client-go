@@ -7,8 +7,8 @@ import (
 )
 
 func validateCedarIdentifier(field, value string) error {
-	if value == "__cedar" {
-		return &ValidationError{Field: field, Value: value, Rule: "uses Cedar's reserved internal identifier"}
+	if isReservedCedarIdentifier(value) {
+		return &ValidationError{Field: field, Value: value, Rule: "uses a reserved Cedar identifier"}
 	}
 	if value == "" || !asciiLetterOrUnderscore(value[0]) {
 		return &ValidationError{Field: field, Value: value, Rule: "must be an ASCII Cedar identifier"}
@@ -19,6 +19,15 @@ func validateCedarIdentifier(field, value string) error {
 		}
 	}
 	return nil
+}
+
+func isReservedCedarIdentifier(value string) bool {
+	switch value {
+	case "true", "false", "if", "then", "else", "in", "like", "has", "is", "__cedar":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateCedarPath(field, value string) error {

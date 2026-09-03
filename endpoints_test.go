@@ -22,7 +22,7 @@ func TestReadEndpointsAndDetailedAuthorization(t *testing.T) {
 				"policies":{"timestamp":"`+testLoadedAt+`","sha256":"abc","size":10,"entries":1,"content":"permit();"},
 				"labels":{"timestamp":"`+testLoadedAt+`","sha256":"def","size":2,"entries":0,"content":"{}"},
 				"schema":{"timestamp":"`+testLoadedAt+`","sha256":"ghi","size":2,"entries":1,"content":"{}"},
-				"bundle":{"format_version":1,"bundle_id":"bundle","archive_sha256":"sum","compressed_size":12,"module_count":2,"signed":true,"loaded_at":"`+testLoadedAt+`"}},
+				"bundle":{"format_version":1,"bundle_id":"bundle","archive_sha256":"sum","compressed_size":12,"module_count":2,"signed":true,"signing_key_id":"key-1","loaded_at":"`+testLoadedAt+`"}},
 				"parallel_configuration":{"cpu_count":8,"workers":4,"rayon_threads":4,"par_threshold":8,"allow_parallel":true},
 				"request_limits":{"max_batch_size":1024,"max_context_bytes":16384,"max_context_depth":8,"max_context_keys":64},
 				"request_context":{"supported":true,"schema_backed":true}}`)
@@ -130,7 +130,7 @@ func TestAllUploadRepresentations(t *testing.T) {
 		default:
 			t.Errorf("unexpected upload call %d", calls)
 		}
-		_, _ = io.WriteString(response, `{}`)
+		_, _ = io.WriteString(response, testPoliciesMetadataJSON)
 	}))
 	defer server.Close()
 	client, err := New(server.URL)

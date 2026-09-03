@@ -23,7 +23,7 @@ func TestUploaderSendsBothCredentialsAndBundle(t *testing.T) {
 		if string(body) != string(bundle) {
 			t.Errorf("body = %q", body)
 		}
-		_, _ = io.WriteString(response, `{}`)
+		_, _ = io.WriteString(response, testPoliciesMetadataJSON)
 	}))
 	defer server.Close()
 

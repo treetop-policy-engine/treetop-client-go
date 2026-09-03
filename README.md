@@ -10,10 +10,12 @@ library.
 
 | Go client | Treetop REST contract | Minimum Go | Status |
 | --- | --- | --- | --- |
-| `v0.1.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Current opaque request-domain API |
+| `v0.2.x` (unreleased) | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.25.13 | Builder, input-spec, and typed construction APIs |
+| `v0.1.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Opaque request-domain API |
 | `v0.0.1` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Initial API; superseded by `v0.1.x` |
 
-CI tests the minimum Go 1.23 release line and the current stable Go release. The table records the
+CI tests the minimum Go 1.25.13 release and the current stable Go release. It also runs the client
+against the official v0.0.15 Treetop REST container pinned by image digest. The table records the
 server wire contract targeted by each client line; server versions not listed are not formally
 supported. Some older responses remain decodable where omitted fields have safe defaults, but that
 does not constitute a compatibility guarantee.
@@ -40,7 +42,8 @@ does not constitute a compatibility guarantee.
 go get github.com/treetop-policy-engine/treetop-client-go
 ```
 
-The module declares Go 1.23 as its minimum language version.
+The unreleased module line declares Go 1.25.13 as its minimum version so supported builds contain
+the standard-library security fixes required by its HTTP and TLS call paths.
 
 ## Quick start
 
@@ -61,23 +64,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	user, err := treetop.NewUser("alice", treetop.UserWithGroupNames("admins"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	action, err := treetop.NewAction("view")
-	if err != nil {
-		log.Fatal(err)
-	}
-	resourceType, err := treetop.NewEntityType("Document")
-	if err != nil {
-		log.Fatal(err)
-	}
-	resource, err := treetop.NewResource(resourceType, "doc-42")
-	if err != nil {
-		log.Fatal(err)
-	}
-	request, err := treetop.NewRequest(treetop.UserPrincipal(user), action, resource)
+	request, err := treetop.NewRequestBuilder().
+		User("alice", treetop.UserInGroups("admins", "operators")).
+		Action("view").
+		Resource("Document", "doc-42").
+		Build()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -92,11 +83,33 @@ func main() {
 
 ## Validated domain values
 
-Request-domain structs have private representations. Construct them with `New...` functions and
-inspect them through copying accessors such as `ID`, `Namespace`, `Groups`, `Attributes`, and
-`Requests`. JSON decoding uses the same validation boundaries. Most zero request-domain values are
-invalid; the two intentional exceptions are the global `Namespace` and an empty
-`AuthorizeRequest` batch.
+The builder is a raw input boundary: its setters retain strings and options, and `Build` converts
+them through the ordinary typed constructors. Independent principal, action, and resource failures
+are returned together as `RequestBuildError`; `errors.Is` and `errors.As` can still inspect each
+underlying error. Network methods accept only the resulting validated `Request`, never a builder or
+raw input.
+
+For a non-stateful construction API, use `RequestInput`:
+
+```go
+request, err := treetop.NewRequestFrom(treetop.RequestInput{
+	Principal: treetop.UserInput{
+		Name:       "alice",
+		GroupNames: []string{"admins", "operators"},
+	},
+	Action: "view",
+	Resource: treetop.ResourceInput{
+		Type: "Document",
+		ID:   "doc-42",
+	},
+})
+```
+
+Request-domain structs have private representations. Construct them with the builder, input types,
+or typed `New...` functions, and inspect them through copying accessors such as `ID`, `Namespace`,
+`Groups`, `Attributes`, and `Requests`. JSON decoding uses the same validation boundaries. Most
+zero request-domain values are invalid; the two intentional exceptions are the global `Namespace`
+and an empty `AuthorizeRequest` batch.
 
 Namespaces and resource entity types are explicit immutable values:
 
@@ -113,12 +126,29 @@ if err != nil {
 
 user, err := treetop.NewUser("alice", treetop.UserWithNamespace(namespace))
 action, err := treetop.NewAction("view", treetop.ActionWithNamespace(namespace))
-resource, err := treetop.NewResource(documentType, "doc-42")
+resource, err := treetop.NewResourceWithType(documentType, "doc-42")
 ```
+
+For ordinary construction, `NewResource("MyApp::Document", "doc-42")` performs the entity-type
+conversion internally. `NewResourceWithType` is useful when an `EntityType` is already shared or
+cached by application code.
 
 `Namespace{}` and `NewNamespace()` both represent the global namespace. Use `ParseNamespace` for
 an already qualified path such as `MyApp::Documents`. `Segments` returns a copy, so callers cannot
 mutate the value. `Namespace.String` returns the qualified `::`-separated path.
+
+For global group names, pass any number of names to `UserInGroups`:
+
+```go
+user, err := treetop.NewUser(
+	"alice",
+	treetop.UserInGroups("admins", "operators", "auditors"),
+)
+```
+
+Use `UserWithGroups` when memberships have explicit namespaces. Group options compose, so repeated
+`UserInGroups`, `UserWithGroupNames`, and `UserWithGroups` options append memberships in option
+order.
 
 ## Client configuration
 
@@ -187,13 +217,8 @@ if err != nil {
 	return err
 }
 
-hostType, err := treetop.NewEntityType("Host")
-if err != nil {
-	return err
-}
-
 resource, err := treetop.NewResource(
-	hostType,
+	"Host",
 	"web-01.example.com",
 	treetop.ResourceWithAttribute("ip", ip),
 	treetop.ResourceWithAttribute("critical", treetop.BoolValue(true)),
@@ -205,9 +230,10 @@ resource, err := treetop.NewResource(
 )
 ```
 
-The client applies `DefaultRequestLimits` before sending authorization calls. If the target server
-has different configured limits, retrieve `Status().RequestLimits` and pass the equivalent values
-to `WithRequestLimits` when constructing the long-lived client.
+The client applies `DefaultRequestLimits` before sending authorization calls: 1,024 batch items,
+16 KiB of context JSON, depth 8, and 64 top-level context keys. If the target server has different
+configured limits, retrieve `Status().RequestLimits` and pass the equivalent values to
+`WithRequestLimits` when constructing the long-lived client.
 
 ## Uploads
 
@@ -239,8 +265,8 @@ metadata, err = uploader.UploadBundle(ctx, compressedBundle)
 Access and upload tokens require HTTPS unless the host is loopback. Plaintext remote development
 requires the separate `DangerouslyAllowInsecureAccessToken` and
 `DangerouslyAllowInsecureUploads` options. Token values are redacted when formatted and when a
-server reflects them in an API error. Go cannot guarantee zeroization of copies made by the
-runtime or HTTP stack; `Destroy` overwrites only the token value's owned byte slice.
+server reflects them in an API error message or code. Go cannot guarantee zeroization of copies
+made by the runtime or HTTP stack; `Destroy` overwrites only the token value's owned byte slice.
 
 ## Policy, schema, and operational endpoints
 
@@ -276,7 +302,7 @@ configured Bearer token. Correlation IDs are sent to both public and protected e
 ## Error handling
 
 Errors support the standard `errors.Is` and `errors.As` flow. Important concrete types are
-`ValidationError`, `ConfigurationError`, `APIError`, `RequestTooLargeError`,
+`ValidationError`, `RequestBuildError`, `ConfigurationError`, `APIError`, `RequestTooLargeError`,
 `ResponseTooLargeError`, `InvalidResponseError`, and `EvaluationError`.
 
 ```go

@@ -72,8 +72,8 @@ func (g Group) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON decodes and validates a group.
 func (g *Group) UnmarshalJSON(data []byte) error {
 	var decoded struct {
-		ID        *string   `json:"id"`
-		Namespace Namespace `json:"namespace"`
+		ID        *string    `json:"id"`
+		Namespace *Namespace `json:"namespace"`
 	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
@@ -81,7 +81,10 @@ func (g *Group) UnmarshalJSON(data []byte) error {
 	if decoded.ID == nil {
 		return &ValidationError{Field: "group.id", Rule: "is required"}
 	}
-	parsed, err := NewGroup(*decoded.ID, GroupWithNamespace(decoded.Namespace))
+	if decoded.Namespace == nil {
+		return &ValidationError{Field: "group.namespace", Rule: "is required"}
+	}
+	parsed, err := NewGroup(*decoded.ID, GroupWithNamespace(*decoded.Namespace))
 	if err != nil {
 		return err
 	}
@@ -110,15 +113,16 @@ func UserWithNamespace(namespace Namespace) UserOption {
 	}
 }
 
-// UserWithGroups sets the user's group memberships.
+// UserWithGroups adds validated group memberships.
 func UserWithGroups(groups ...Group) UserOption {
 	return func(user *User) error {
-		user.groups = append([]Group(nil), groups...)
-		for _, group := range user.groups {
+		validated := append([]Group(nil), groups...)
+		for _, group := range validated {
 			if err := group.Validate(); err != nil {
 				return err
 			}
 		}
+		user.groups = append(user.groups, validated...)
 		return nil
 	}
 }
@@ -134,9 +138,15 @@ func UserWithGroupNames(names ...string) UserOption {
 			}
 			groups = append(groups, group)
 		}
-		user.groups = groups
+		user.groups = append(user.groups, groups...)
 		return nil
 	}
+}
+
+// UserInGroups adds non-namespaced group memberships. It is a concise alias
+// for UserWithGroupNames.
+func UserInGroups(names ...string) UserOption {
+	return UserWithGroupNames(names...)
 }
 
 // NewUser constructs and validates a user.
@@ -202,9 +212,9 @@ func (u User) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON decodes and validates a user and its groups.
 func (u *User) UnmarshalJSON(data []byte) error {
 	var decoded struct {
-		ID        *string   `json:"id"`
-		Namespace Namespace `json:"namespace"`
-		Groups    []Group   `json:"groups"`
+		ID        *string    `json:"id"`
+		Namespace *Namespace `json:"namespace"`
+		Groups    *[]Group   `json:"groups"`
 	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
@@ -212,7 +222,13 @@ func (u *User) UnmarshalJSON(data []byte) error {
 	if decoded.ID == nil {
 		return &ValidationError{Field: "user.id", Rule: "is required"}
 	}
-	parsed, err := NewUser(*decoded.ID, UserWithNamespace(decoded.Namespace), UserWithGroups(decoded.Groups...))
+	if decoded.Namespace == nil {
+		return &ValidationError{Field: "user.namespace", Rule: "is required"}
+	}
+	if decoded.Groups == nil {
+		return &ValidationError{Field: "user.groups", Rule: "is required"}
+	}
+	parsed, err := NewUser(*decoded.ID, UserWithNamespace(*decoded.Namespace), UserWithGroups((*decoded.Groups)...))
 	if err != nil {
 		return err
 	}
@@ -378,8 +394,8 @@ func (a Action) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON decodes and validates an action.
 func (a *Action) UnmarshalJSON(data []byte) error {
 	var decoded struct {
-		ID        *string   `json:"id"`
-		Namespace Namespace `json:"namespace"`
+		ID        *string    `json:"id"`
+		Namespace *Namespace `json:"namespace"`
 	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
@@ -387,7 +403,10 @@ func (a *Action) UnmarshalJSON(data []byte) error {
 	if decoded.ID == nil {
 		return &ValidationError{Field: "action.id", Rule: "is required"}
 	}
-	parsed, err := NewAction(*decoded.ID, ActionWithNamespace(decoded.Namespace))
+	if decoded.Namespace == nil {
+		return &ValidationError{Field: "action.namespace", Rule: "is required"}
+	}
+	parsed, err := NewAction(*decoded.ID, ActionWithNamespace(*decoded.Namespace))
 	if err != nil {
 		return err
 	}
@@ -399,11 +418,16 @@ func (a *Action) UnmarshalJSON(data []byte) error {
 type AttrType string
 
 const (
+	// AttrTypeString identifies a Cedar string value.
 	AttrTypeString AttrType = "String"
-	AttrTypeBool   AttrType = "Bool"
-	AttrTypeLong   AttrType = "Long"
-	AttrTypeIP     AttrType = "Ip"
-	AttrTypeSet    AttrType = "Set"
+	// AttrTypeBool identifies a Cedar Boolean value.
+	AttrTypeBool AttrType = "Bool"
+	// AttrTypeLong identifies a Cedar signed 64-bit integer value.
+	AttrTypeLong AttrType = "Long"
+	// AttrTypeIP identifies a Cedar IP address extension value.
+	AttrTypeIP AttrType = "Ip"
+	// AttrTypeSet identifies a Cedar set value.
+	AttrTypeSet AttrType = "Set"
 )
 
 // AttrValue is a typed Cedar resource or context attribute. Construct values
@@ -432,7 +456,9 @@ func IPValue(value string) (AttrValue, error) {
 
 // SetValue constructs a Cedar set attribute.
 func SetValue(values ...AttrValue) AttrValue {
-	return AttrValue{typeName: AttrTypeSet, value: append([]AttrValue(nil), values...)}
+	set := make([]AttrValue, len(values))
+	copy(set, values)
+	return AttrValue{typeName: AttrTypeSet, value: set}
 }
 
 // Type returns the value's Treetop wire tag.
@@ -512,38 +538,57 @@ func (v *AttrValue) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &header); err != nil {
 		return err
 	}
+	if len(header.Value) == 0 {
+		return requiredAttrValue(header.Type)
+	}
 	var value any
 	switch header.Type {
 	case AttrTypeString, AttrTypeIP:
-		var decoded string
+		var decoded *string
 		if err := json.Unmarshal(header.Value, &decoded); err != nil {
 			return err
 		}
-		value = decoded
+		if decoded == nil {
+			return requiredAttrValue(header.Type)
+		}
+		value = *decoded
 	case AttrTypeBool:
-		var decoded bool
+		var decoded *bool
 		if err := json.Unmarshal(header.Value, &decoded); err != nil {
 			return err
 		}
-		value = decoded
+		if decoded == nil {
+			return requiredAttrValue(header.Type)
+		}
+		value = *decoded
 	case AttrTypeLong:
-		var decoded int64
+		var decoded *int64
 		decoder := json.NewDecoder(bytes.NewReader(header.Value))
 		if err := decoder.Decode(&decoded); err != nil {
 			return err
 		}
-		value = decoded
+		if decoded == nil {
+			return requiredAttrValue(header.Type)
+		}
+		value = *decoded
 	case AttrTypeSet:
-		var decoded []AttrValue
+		var decoded *[]AttrValue
 		if err := json.Unmarshal(header.Value, &decoded); err != nil {
 			return err
 		}
-		value = decoded
+		if decoded == nil {
+			return requiredAttrValue(header.Type)
+		}
+		value = *decoded
 	default:
 		return &ValidationError{Field: "attribute type", Value: string(header.Type), Rule: "is not supported"}
 	}
 	*v = AttrValue{typeName: header.Type, value: value}
 	return v.Validate()
+}
+
+func requiredAttrValue(kind AttrType) error {
+	return &ValidationError{Field: "attribute value", Value: string(kind), Rule: "must be present and non-null"}
 }
 
 // Resource is the target entity in an authorization request.
@@ -582,8 +627,19 @@ func ResourceWithAttributes(attrs map[string]AttrValue) ResourceOption {
 	}
 }
 
-// NewResource constructs and validates a resource.
-func NewResource(kind EntityType, id string, options ...ResourceOption) (Resource, error) {
+// NewResource constructs and validates a resource from a qualified Cedar
+// entity type string.
+func NewResource(kind, id string, options ...ResourceOption) (Resource, error) {
+	entityType, err := NewEntityType(kind)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource entity type: %w", err)
+	}
+	return NewResourceWithType(entityType, id, options...)
+}
+
+// NewResourceWithType constructs and validates a resource from an existing
+// immutable EntityType.
+func NewResourceWithType(kind EntityType, id string, options ...ResourceOption) (Resource, error) {
 	if err := kind.validate("resource.kind"); err != nil {
 		return Resource{}, err
 	}
@@ -671,7 +727,7 @@ func (r *Resource) UnmarshalJSON(data []byte) error {
 	if decoded.ID == nil {
 		return &ValidationError{Field: "resource.id", Rule: "is required"}
 	}
-	parsed, err := NewResource(*decoded.Kind, *decoded.ID, ResourceWithAttributes(decoded.Attrs))
+	parsed, err := NewResourceWithType(*decoded.Kind, *decoded.ID, ResourceWithAttributes(decoded.Attrs))
 	if err != nil {
 		return err
 	}

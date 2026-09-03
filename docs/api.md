@@ -83,11 +83,25 @@ Attribute values use adjacent `type` and `value` tags:
 | `Ip` | `IPValue` | validated IP address or CIDR string |
 | `Set` | `SetValue` | nested array of attribute values |
 
+Attribute `value` fields must be present and non-null. `SetValue()` encodes an empty Cedar set as
+`[]`, never `null`. User, group, and action namespace arrays are required on the wire, as is the
+user `groups` array even when it is empty.
+
 The request-domain types have private representations and can only be populated through validated
 constructors or validated JSON decoding. `Namespace` stores an immutable Cedar namespace and
 `EntityType` stores an immutable qualified resource type. Slice and map accessors return copies so
 callers cannot mutate a previously validated request. Requests are still validated immediately
 before transport as defense in depth.
+
+`RequestBuilder` and `RequestInput` are raw construction boundaries. They hold ordinary input
+representations, but `Build` and `NewRequestFrom` return only validated `Request` values. A
+`RequestBuildError` can contain independent principal, action, and resource failures and supports
+multi-error traversal through `errors.Is` and `errors.As`. Client authorization methods do not
+accept builders or input specs.
+
+`NewResource` accepts a qualified entity-type string and validates it internally.
+`NewResourceWithType` retains the typed composition path for callers that already have an
+`EntityType`.
 
 ## Authorization response
 
@@ -126,18 +140,25 @@ either response form.
 
 ## User-policy query
 
+`UserInGroups("admins", "operators")` adds multiple global group memberships when constructing a
+user. Use `UserWithGroups` for namespace-qualified `Group` values. Membership options append in
+option order.
+
 `FilterNamespaces` accepts validated `Namespace` values and emits repeated `namespaces[]` query
 values. The global namespace is not a meaningful filter and is rejected. `FilterGroups` emits
-repeated `groups[]` values. The user ID is encoded as exactly one URL path segment, including
-spaces and slashes.
+repeated `groups[]` values. These filters affect policy listing; they do not construct a `User`.
+The user ID is encoded as exactly one URL path segment, including spaces and slashes.
 
 ## Metadata and compatibility
 
 `MetadataSource` decodes the current `{"url":"https://..."}` form and the legacy bare string form.
 Unknown `PolicyMatchReason` and `RequestContextFallbackReason` string values remain accessible for
-forward compatibility. Missing legacy status limits default to 16 KiB, depth 8, and 64 keys;
-missing context capability defaults to unsupported. `PoliciesMetadata.Bundle` carries v0.0.15
-atomic-bundle metadata when present.
+forward compatibility. Structured responses require the fields mandated by the v0.0.15 contract;
+missing objects and arrays are rejected instead of being returned as misleading zero values.
+Missing legacy status limits default to an unknown batch limit, 16 KiB, depth 8, and 64 keys;
+missing context capability defaults to unsupported. `DefaultRequestLimits` uses the current server
+defaults of 1,024 batch items, 16 KiB, depth 8, and 64 keys. `PoliciesMetadata.Bundle` carries
+v0.0.15 atomic-bundle metadata when present.
 
 ## Errors and limits
 
@@ -151,7 +172,7 @@ Current server errors have this shape; older responses containing only `error` a
 }
 ```
 
-Non-2xx responses become `APIError`. The successful body limit defaults to 16 MiB and the error
-body limit is fixed at 64 KiB. JSON and raw request bodies default to 16 MiB. Plain-text responses
-must be valid UTF-8. An oversized or structurally inconsistent response is never returned as a
-successful result.
+Non-2xx responses become `APIError`; reflected access and upload tokens are redacted from both its
+message and code. The successful body limit defaults to 16 MiB and the error body limit is fixed at
+64 KiB. JSON and raw request bodies default to 16 MiB. Plain-text responses must be valid UTF-8. An
+oversized or structurally inconsistent response is never returned as a successful result.

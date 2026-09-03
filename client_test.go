@@ -249,6 +249,24 @@ func TestUserPoliciesEscapesPathAndBuildsRepeatedQuery(t *testing.T) {
 	}
 }
 
+func TestBaseURLPreservesEscapedPathPrefix(t *testing.T) {
+	client, err := New("https://example.com/proxy%2Ftenant/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := client.endpoint("status")
+	if got, want := endpoint.EscapedPath(), "/proxy%2Ftenant/api/v1/status"; got != want {
+		t.Fatalf("escaped endpoint path = %q, want %q", got, want)
+	}
+	userEndpoint, err := client.userPoliciesEndpoint("alice/ops")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := userEndpoint.EscapedPath(), "/proxy%2Ftenant/api/v1/policies/alice%2Fops"; got != want {
+		t.Fatalf("escaped user-policy path = %q, want %q", got, want)
+	}
+}
+
 func TestCredentialsRequireSecureNonLoopbackTransport(t *testing.T) {
 	token, err := NewAccessToken("secret")
 	if err != nil {
@@ -290,6 +308,35 @@ func TestAPIErrorPreservesCodeAndDetails(t *testing.T) {
 	}
 	if apiError.Code != "invalid_policy" || apiError.Details == nil || *apiError.Details.Line != 3 {
 		t.Fatalf("unexpected API error: %#v", apiError)
+	}
+}
+
+func TestAPIErrorRedactsOverlappingTokensInCodeAndMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(response, `{"error":"secret-long secret","code":"secret-long"}`)
+	}))
+	defer server.Close()
+	access, _ := NewAccessToken("secret")
+	upload, _ := NewUploadToken("secret-long")
+	client, err := New(server.URL, WithAccessToken(access))
+	if err != nil {
+		t.Fatal(err)
+	}
+	uploader, err := client.Uploader(upload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = uploader.UploadPolicies(context.Background(), "permit();")
+	var apiError *APIError
+	if !errors.As(err, &apiError) {
+		t.Fatalf("got %T %v, want *APIError", err, err)
+	}
+	if strings.Contains(apiError.Code, "secret") || strings.Contains(apiError.Message, "secret") || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("credential leaked in API error: %#v / %v", apiError, err)
+	}
+	if apiError.Code != redacted || apiError.Message != redacted+" "+redacted {
+		t.Fatalf("unexpected redaction: %#v", apiError)
 	}
 }
 

@@ -12,8 +12,10 @@ import (
 type Decision string
 
 const (
+	// DecisionAllow reports that a request is authorized.
 	DecisionAllow Decision = "Allow"
-	DecisionDeny  Decision = "Deny"
+	// DecisionDeny reports that a request is not authorized.
+	DecisionDeny Decision = "Deny"
 )
 
 // PolicyVersion identifies the policy snapshot used for evaluation.
@@ -66,8 +68,10 @@ type AuthorizeDecisionDetailed struct {
 type BatchStatus string
 
 const (
+	// BatchStatusSuccess identifies an authorization item with a decision.
 	BatchStatusSuccess BatchStatus = "success"
-	BatchStatusFailed  BatchStatus = "failed"
+	// BatchStatusFailed identifies an authorization item with an evaluation error.
+	BatchStatusFailed BatchStatus = "failed"
 )
 
 // BatchResult contains exactly one successful result or evaluation error.
@@ -297,6 +301,11 @@ func validateDecision(value any, batchVersion PolicyVersion, index int) error {
 		if !decision.Version.equal(batchVersion) {
 			return versionMismatch(index)
 		}
+		for policyIndex, policy := range decision.Policies {
+			if err := policy.validateResponse(policyIndex); err != nil {
+				return err
+			}
+		}
 		switch decision.Decision {
 		case DecisionAllow:
 			if len(decision.Policies) == 0 {
@@ -419,6 +428,10 @@ type RequestLimits struct {
 
 // DefaultRequestLimits returns limits matching the default Treetop server.
 func DefaultRequestLimits() RequestLimits {
+	return RequestLimits{MaxBatchSize: 1024, MaxContextBytes: 16 << 10, MaxContextDepth: 8, MaxContextKeys: 64}
+}
+
+func legacyRequestLimits() RequestLimits {
 	return RequestLimits{MaxContextBytes: 16 << 10, MaxContextDepth: 8, MaxContextKeys: 64}
 }
 
@@ -434,7 +447,9 @@ func (l RequestLimits) validate() error {
 type RequestContextFallbackReason string
 
 const (
-	FallbackNoSchema           RequestContextFallbackReason = "no_schema"
+	// FallbackNoSchema reports that request context is not schema-validated because no schema is loaded.
+	FallbackNoSchema RequestContextFallbackReason = "no_schema"
+	// FallbackSchemaIncompatible reports that the loaded schema cannot validate request context.
 	FallbackSchemaIncompatible RequestContextFallbackReason = "schema_incompatible"
 )
 
@@ -465,13 +480,7 @@ type StatusResponse struct {
 // UnmarshalJSON applies safe legacy defaults for fields omitted by older
 // compatible servers.
 func (s *StatusResponse) UnmarshalJSON(data []byte) error {
-	type plain StatusResponse
-	decoded := plain{RequestLimits: DefaultRequestLimits()}
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
-	}
-	*s = StatusResponse(decoded)
-	return nil
+	return unmarshalStatusResponse(data, s)
 }
 
 // PolicyMatchReason explains why a user-policy query selected a policy.
@@ -479,19 +488,32 @@ func (s *StatusResponse) UnmarshalJSON(data []byte) error {
 type PolicyMatchReason string
 
 const (
-	MatchPrincipalEq   PolicyMatchReason = "PrincipalEq"
-	MatchPrincipalIn   PolicyMatchReason = "PrincipalIn"
-	MatchPrincipalAny  PolicyMatchReason = "PrincipalAny"
-	MatchPrincipalIs   PolicyMatchReason = "PrincipalIs"
+	// MatchPrincipalEq identifies a principal equality constraint.
+	MatchPrincipalEq PolicyMatchReason = "PrincipalEq"
+	// MatchPrincipalIn identifies a principal membership constraint.
+	MatchPrincipalIn PolicyMatchReason = "PrincipalIn"
+	// MatchPrincipalAny identifies an unconstrained principal.
+	MatchPrincipalAny PolicyMatchReason = "PrincipalAny"
+	// MatchPrincipalIs identifies a principal type constraint.
+	MatchPrincipalIs PolicyMatchReason = "PrincipalIs"
+	// MatchPrincipalIsIn identifies a principal type-and-membership constraint.
 	MatchPrincipalIsIn PolicyMatchReason = "PrincipalIsIn"
-	MatchActionEq      PolicyMatchReason = "ActionEq"
-	MatchActionIn      PolicyMatchReason = "ActionIn"
-	MatchActionAny     PolicyMatchReason = "ActionAny"
-	MatchResourceEq    PolicyMatchReason = "ResourceEq"
-	MatchResourceIn    PolicyMatchReason = "ResourceIn"
-	MatchResourceAny   PolicyMatchReason = "ResourceAny"
-	MatchResourceIs    PolicyMatchReason = "ResourceIs"
-	MatchResourceIsIn  PolicyMatchReason = "ResourceIsIn"
+	// MatchActionEq identifies an action equality constraint.
+	MatchActionEq PolicyMatchReason = "ActionEq"
+	// MatchActionIn identifies an action membership constraint.
+	MatchActionIn PolicyMatchReason = "ActionIn"
+	// MatchActionAny identifies an unconstrained action.
+	MatchActionAny PolicyMatchReason = "ActionAny"
+	// MatchResourceEq identifies a resource equality constraint.
+	MatchResourceEq PolicyMatchReason = "ResourceEq"
+	// MatchResourceIn identifies a resource membership constraint.
+	MatchResourceIn PolicyMatchReason = "ResourceIn"
+	// MatchResourceAny identifies an unconstrained resource.
+	MatchResourceAny PolicyMatchReason = "ResourceAny"
+	// MatchResourceIs identifies a resource type constraint.
+	MatchResourceIs PolicyMatchReason = "ResourceIs"
+	// MatchResourceIsIn identifies a resource type-and-membership constraint.
+	MatchResourceIsIn PolicyMatchReason = "ResourceIsIn"
 )
 
 // PolicyMatch contains the Cedar policy ID and selection reasons.

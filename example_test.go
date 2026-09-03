@@ -22,7 +22,7 @@ func ExampleNewRequest() {
 	user, _ := treetop.NewUser("alice", treetop.UserWithGroupNames("admins"))
 	action, _ := treetop.NewAction("view")
 	resourceType, _ := treetop.NewEntityType("Document")
-	resource, _ := treetop.NewResource(resourceType, "doc-42",
+	resource, _ := treetop.NewResourceWithType(resourceType, "doc-42",
 		treetop.ResourceWithAttribute("owner", treetop.StringValue("alice")),
 	)
 	request, _ := treetop.NewRequest(treetop.UserPrincipal(user), action, resource)
@@ -31,4 +31,27 @@ func ExampleNewRequest() {
 	body, _ := json.Marshal(batch)
 	fmt.Println(string(body))
 	// Output: {"requests":[{"principal":{"User":{"id":"alice","namespace":[],"groups":[{"id":"admins","namespace":[]}]}},"action":{"id":"view","namespace":[]},"resource":{"kind":"Document","id":"doc-42","attrs":{"owner":{"type":"String","value":"alice"}}}}]}
+}
+
+func ExampleNewRequestBuilder() {
+	request, _ := treetop.NewRequestBuilder().
+		User("alice", treetop.UserInGroups("admins", "operators")).
+		Action("view").
+		Resource("Document", "doc-42").
+		Build()
+
+	body, _ := json.Marshal(request)
+	fmt.Println(string(body))
+	// Output: {"principal":{"User":{"id":"alice","namespace":[],"groups":[{"id":"admins","namespace":[]},{"id":"operators","namespace":[]}]}},"action":{"id":"view","namespace":[]},"resource":{"kind":"Document","id":"doc-42"}}
+}
+
+func ExampleNewRequestFrom() {
+	request, _ := treetop.NewRequestFrom(treetop.RequestInput{
+		Principal: treetop.UserInput{Name: "alice", GroupNames: []string{"admins"}},
+		Action:    "view",
+		Resource:  treetop.ResourceInput{Type: "Document", ID: "doc-42"},
+	})
+
+	fmt.Println(request.Resource().Kind())
+	// Output: Document
 }
