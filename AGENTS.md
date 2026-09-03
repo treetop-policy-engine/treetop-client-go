@@ -41,6 +41,8 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
 - `transport.go` owns header application, bounded I/O, JSON decoding, API errors, and redaction.
 - `endpoints.go` owns read-only and authorization endpoint methods.
 - `uploader.go` owns the upload capability and all credentialed mutation endpoints.
+- `cedar_types.go` owns immutable Cedar namespaces, entity types, and internal validated scalar
+  representations.
 - `request_types.go` and `authorization_request.go` own request-domain values and validation.
 - `response_types.go` owns server-facing results, metadata, compatibility defaults, and response
   consistency checks.
@@ -60,13 +62,18 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
 - Keep interfaces consumer-owned unless the package needs to define a real behavioral boundary.
 - Avoid dependencies when the standard library provides an equally safe, clear implementation.
   New dependencies must be maintained, published, license-compatible, and justified.
-- Document every exported identifier. Keep zero-value behavior explicit and test constructors plus
-  direct-field mutation where exported request structs permit it.
+- Document every exported identifier. Keep zero-value behavior explicit. Request-domain structs
+  must keep invariant-bearing fields private and expose defensive-copy accessors for slices and
+  maps.
 
 ## Wire compatibility
 
-- Treat `../treetop-rest/docs/api.md`, its generated OpenAPI document, server handler tests, and
-  released server behavior as sources of truth.
+- Treat the canonical
+  [Treetop REST repository](https://github.com/treetop-policy-engine/treetop-rest)—especially its
+  [API documentation](https://github.com/treetop-policy-engine/treetop-rest/blob/main/docs/api.md),
+  [generated OpenAPI document](https://github.com/treetop-policy-engine/treetop-rest/blob/main/docs/openapi.json),
+  server handler tests, and released behavior—as sources of truth. Do not rely on sibling-directory
+  paths because this module must remain usable as a standalone clone.
 - Preserve JSON field names, enum tags, flattening, omission rules, and query parameter names.
 - Assert exact JSON for every changed request shape. A Go round trip alone is not proof of server
   compatibility.
@@ -76,6 +83,9 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
   returning authorization results.
 - Update `docs/api.md`, README compatibility text, tests, and the changelog when targeting a new
   server contract.
+- Keep the versioned compatibility matrix in `README.md` current for every release. Compatibility
+  claims must name the client line, Treetop REST contract, and minimum Go version, and must not
+  extend beyond tested behavior.
 
 ## Security boundaries
 
@@ -111,10 +121,15 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
 - Call out breaking changes and the required migration action explicitly.
 - Give every fenced Markdown block a language; use `text` for plain output.
 
-## Commits and releases
+## Commits, pull requests, and releases
 
 - Keep commits focused and use imperative subjects under 72 characters.
 - Sign commits and release tags. Do not bypass configured signing.
+- Merge pull requests with squash merge. Do not use merge commits or rebase merges on `main`.
+- Use the substantive pull request description as the squash commit body, preserving rationale,
+  user-visible behavior, migration notes, and security considerations while removing
+  verification-only command lists and checklists.
+- Do not merge with failing or incomplete relevant checks.
 - Do not commit test binaries, coverage profiles, local credentials, tool caches, or temporary
   server artifacts.
 - Before release, update dependencies and actions deliberately, review upstream security and

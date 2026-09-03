@@ -83,8 +83,11 @@ Attribute values use adjacent `type` and `value` tags:
 | `Ip` | `IPValue` | validated IP address or CIDR string |
 | `Set` | `SetValue` | nested array of attribute values |
 
-The constructor APIs validate immediately. Exported request fields are validated again before
-transport so mutation cannot bypass safety checks.
+The request-domain types have private representations and can only be populated through validated
+constructors or validated JSON decoding. `Namespace` stores an immutable Cedar namespace and
+`EntityType` stores an immutable qualified resource type. Slice and map accessors return copies so
+callers cannot mutate a previously validated request. Requests are still validated immediately
+before transport as defense in depth.
 
 ## Authorization response
 
@@ -123,9 +126,10 @@ either response form.
 
 ## User-policy query
 
-`FilterNamespaces` emits repeated `namespaces[]` query values and validates qualified Cedar paths.
-`FilterGroups` emits repeated `groups[]` values. The user ID is encoded as exactly one URL path
-segment, including spaces and slashes.
+`FilterNamespaces` accepts validated `Namespace` values and emits repeated `namespaces[]` query
+values. The global namespace is not a meaningful filter and is rejected. `FilterGroups` emits
+repeated `groups[]` values. The user ID is encoded as exactly one URL path segment, including
+spaces and slashes.
 
 ## Metadata and compatibility
 

@@ -222,13 +222,13 @@ func (r *AuthorizeResponse[T]) Validate(expectedResults int) error {
 }
 
 func validateAuthorizeResponse[T any](response *AuthorizeResponse[T], request *AuthorizeRequest) error {
-	if err := validateAuthorizeResponseStructure(response, len(request.Requests)); err != nil {
+	if err := validateAuthorizeResponseStructure(response, len(request.requests)); err != nil {
 		return err
 	}
 	for position := range response.Results {
 		item := &response.Results[position]
-		expectedID := request.Requests[position].ID
-		if expectedID == "" && item.ID != nil || expectedID != "" && (item.ID == nil || *item.ID != expectedID) {
+		expectedID, hasExpectedID := request.requests[position].ID()
+		if !hasExpectedID && item.ID != nil || hasExpectedID && (item.ID == nil || *item.ID != expectedID) {
 			return &InvalidResponseError{Message: fmt.Sprintf("result index %d has an unexpected request ID", item.Index)}
 		}
 	}

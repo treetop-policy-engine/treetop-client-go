@@ -22,12 +22,20 @@ func validateCedarIdentifier(field, value string) error {
 }
 
 func validateCedarPath(field, value string) error {
-	for _, segment := range strings.Split(value, "::") {
+	for {
+		separator := strings.Index(value, "::")
+		segment := value
+		if separator >= 0 {
+			segment = value[:separator]
+		}
 		if err := validateCedarIdentifier(field, segment); err != nil {
 			return err
 		}
+		if separator < 0 {
+			return nil
+		}
+		value = value[separator+2:]
 	}
-	return nil
 }
 
 func validateNamespace(field string, namespace []string) error {

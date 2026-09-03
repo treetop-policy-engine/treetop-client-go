@@ -7,6 +7,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-03
+
+### Added
+
+- Add a versioned compatibility matrix covering the client release line, targeted Treetop REST
+  contract, and minimum supported Go version.
+
+### Changed
+
+- **Breaking:** make authorization request-domain values opaque and immutable, introduce validated
+  `Namespace` and `EntityType` values, require `EntityType` in `NewResource`, and require
+  `Namespace` in namespace options and filters. Callers must use `NewNamespace`, `ParseNamespace`,
+  `NewEntityType`, `GroupWithNamespace`, `UserWithNamespace`, `ActionWithNamespace`, and the
+  request-domain accessor methods instead of struct fields.
+- **Breaking:** make `SingleAuthorizeRequest` return `(*AuthorizeRequest, error)` so invalid zero
+  request values cannot bypass construction-time validation.
+
+### Security
+
+- Prevent post-construction mutation of group memberships, resource attributes, authorization
+  context, and batch items by returning defensive copies from request-domain accessors.
+
 ## [0.0.1] - 2026-09-03
 
 ### Added
@@ -26,5 +48,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Refuse credentials over remote plaintext HTTP by default, omit access credentials from public
   probes and OpenAPI retrieval, deny redirects, and redact reflected credentials from API errors.
 
-[Unreleased]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/treetop-policy-engine/treetop-client-go/releases/tag/v0.0.1

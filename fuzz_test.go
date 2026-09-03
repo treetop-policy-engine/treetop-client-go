@@ -33,6 +33,36 @@ func FuzzPrincipalJSON(f *testing.F) {
 	})
 }
 
+func FuzzNamespaceJSON(f *testing.F) {
+	f.Add(`[]`)
+	f.Add(`["MyApp","Core"]`)
+	f.Add(`["__cedar"]`)
+	f.Add(`null`)
+	f.Fuzz(func(t *testing.T, input string) {
+		var namespace Namespace
+		if json.Unmarshal([]byte(input), &namespace) == nil {
+			if err := namespace.Validate(); err != nil {
+				t.Fatalf("successful decode produced invalid namespace: %v", err)
+			}
+		}
+	})
+}
+
+func FuzzEntityTypeJSON(f *testing.F) {
+	f.Add(`"Document"`)
+	f.Add(`"MyApp::Document"`)
+	f.Add(`"not-a-type"`)
+	f.Add(`null`)
+	f.Fuzz(func(t *testing.T, input string) {
+		var entityType EntityType
+		if json.Unmarshal([]byte(input), &entityType) == nil {
+			if err := entityType.Validate(); err != nil {
+				t.Fatalf("successful decode produced invalid entity type: %v", err)
+			}
+		}
+	})
+}
+
 func FuzzBaseURL(f *testing.F) {
 	f.Add("https://example.com")
 	f.Add("http://localhost:9999/prefix")

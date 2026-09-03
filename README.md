@@ -3,12 +3,25 @@
 An idiomatic Go client for [Treetop REST](https://github.com/treetop-policy-engine/treetop-rest),
 the Cedar-based policy authorization service.
 
-The client currently targets the Treetop REST v0.0.15 wire contract while retaining safe
-defaults for response fields omitted by older servers. It uses only the Go standard library.
+The client currently targets the Treetop REST v0.0.15 wire contract. It uses only the Go standard
+library.
+
+## Compatibility
+
+| Go client | Treetop REST contract | Minimum Go | Status |
+| --- | --- | --- | --- |
+| `v0.1.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Current opaque request-domain API |
+| `v0.0.1` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Initial API; superseded by `v0.1.x` |
+
+CI tests the minimum Go 1.23 release line and the current stable Go release. The table records the
+server wire contract targeted by each client line; server versions not listed are not formally
+supported. Some older responses remain decodable where omitted fields have safe defaults, but that
+does not constitute a compatibility guarantee.
 
 ## Features
 
 - Context-aware methods and typed request/response values.
+- Opaque, validated request-domain values that cannot be mutated after construction.
 - A concurrency-safe, pooled `http.Client` intended for application-wide reuse.
 - Locally validated Cedar identifiers, entity IDs, attributes, IP/CIDR values, request IDs,
   batch uniqueness, and request-context limits.
@@ -56,7 +69,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	resource, err := treetop.NewResource("Document", "doc-42")
+	resourceType, err := treetop.NewEntityType("Document")
+	if err != nil {
+		log.Fatal(err)
+	}
+	resource, err := treetop.NewResource(resourceType, "doc-42")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,6 +89,36 @@ func main() {
 	fmt.Println("Allowed:", allowed)
 }
 ```
+
+## Validated domain values
+
+Request-domain structs have private representations. Construct them with `New...` functions and
+inspect them through copying accessors such as `ID`, `Namespace`, `Groups`, `Attributes`, and
+`Requests`. JSON decoding uses the same validation boundaries. Most zero request-domain values are
+invalid; the two intentional exceptions are the global `Namespace` and an empty
+`AuthorizeRequest` batch.
+
+Namespaces and resource entity types are explicit immutable values:
+
+```go
+namespace, err := treetop.NewNamespace("MyApp", "Documents")
+if err != nil {
+	return err
+}
+
+documentType, err := treetop.NewEntityType("MyApp::Document")
+if err != nil {
+	return err
+}
+
+user, err := treetop.NewUser("alice", treetop.UserWithNamespace(namespace))
+action, err := treetop.NewAction("view", treetop.ActionWithNamespace(namespace))
+resource, err := treetop.NewResource(documentType, "doc-42")
+```
+
+`Namespace{}` and `NewNamespace()` both represent the global namespace. Use `ParseNamespace` for
+an already qualified path such as `MyApp::Documents`. `Segments` returns a copy, so callers cannot
+mutate the value. `Namespace.String` returns the qualified `::`-separated path.
 
 ## Client configuration
 
@@ -140,8 +187,13 @@ if err != nil {
 	return err
 }
 
+hostType, err := treetop.NewEntityType("Host")
+if err != nil {
+	return err
+}
+
 resource, err := treetop.NewResource(
-	"Host",
+	hostType,
 	"web-01.example.com",
 	treetop.ResourceWithAttribute("ip", ip),
 	treetop.ResourceWithAttribute("critical", treetop.BoolValue(true)),
@@ -201,11 +253,15 @@ cedarText, err := client.PoliciesText(ctx)
 schema, err := client.Schema(ctx)
 schemaText, err := client.SchemaText(ctx)
 
+policyNamespace, err := treetop.ParseNamespace("MyApp::Documents")
+if err != nil {
+	return err
+}
 userPolicies, err := client.UserPolicies(
 	ctx,
 	"alice",
 	treetop.FilterGroups("admins"),
-	treetop.FilterNamespaces("MyApp::Documents"),
+	treetop.FilterNamespaces(policyNamespace),
 )
 
 err = client.Live(ctx)

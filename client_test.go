@@ -240,7 +240,7 @@ func TestUserPoliciesEscapesPathAndBuildsRepeatedQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.UserPolicies(context.Background(), "alice/ops", FilterGroups("admins", "users"), FilterNamespaces("App::Docs"))
+	result, err := client.UserPolicies(context.Background(), "alice/ops", FilterGroups("admins", "users"), FilterNamespaces(testNamespace(t, "App", "Docs")))
 	if err != nil {
 		t.Fatal(err)
 	}

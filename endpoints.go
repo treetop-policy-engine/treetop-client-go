@@ -119,7 +119,11 @@ func (c *Client) AuthorizeDetailed(ctx context.Context, request *AuthorizeReques
 // IsAllowed evaluates one request and returns true for Allow and false for
 // Deny. An item-level evaluation failure is returned as *EvaluationError.
 func (c *Client) IsAllowed(ctx context.Context, request Request) (bool, error) {
-	response, err := c.Authorize(ctx, SingleAuthorizeRequest(request))
+	batch, err := SingleAuthorizeRequest(request)
+	if err != nil {
+		return false, err
+	}
+	response, err := c.Authorize(ctx, batch)
 	if err != nil {
 		return false, err
 	}
@@ -170,7 +174,7 @@ type UserPoliciesOption func(*userPoliciesQuery) error
 
 type userPoliciesQuery struct {
 	groups     []string
-	namespaces []string
+	namespaces []Namespace
 }
 
 // FilterGroups includes group memberships in a user-policy query.
@@ -187,10 +191,13 @@ func FilterGroups(groups ...string) UserPoliciesOption {
 }
 
 // FilterNamespaces restricts a user-policy query to qualified Cedar namespaces.
-func FilterNamespaces(namespaces ...string) UserPoliciesOption {
+func FilterNamespaces(namespaces ...Namespace) UserPoliciesOption {
 	return func(query *userPoliciesQuery) error {
 		for _, namespace := range namespaces {
-			if err := validateCedarPath("user policies namespace", namespace); err != nil {
+			if namespace.IsEmpty() {
+				return &ValidationError{Field: "user policies namespace", Rule: "must not be the global namespace"}
+			}
+			if err := namespace.validate("user policies namespace"); err != nil {
 				return err
 			}
 		}
@@ -284,7 +291,7 @@ func (c *Client) buildUserPoliciesURL(user string, raw bool, options []UserPolic
 	}
 	query := make(url.Values)
 	for _, namespace := range queryConfig.namespaces {
-		query.Add("namespaces[]", namespace)
+		query.Add("namespaces[]", namespace.String())
 	}
 	for _, group := range queryConfig.groups {
 		query.Add("groups[]", group)

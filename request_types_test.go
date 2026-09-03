@@ -44,8 +44,8 @@ func TestConstructorsRejectUnsafeValues(t *testing.T) {
 		make func() error
 	}{
 		{"quoted user", func() error { _, err := NewUser(`bad"id`); return err }},
-		{"reserved namespace", func() error { _, err := NewAction("read", "__cedar"); return err }},
-		{"invalid resource kind", func() error { _, err := NewResource("not-a-kind", "1"); return err }},
+		{"reserved namespace", func() error { _, err := NewNamespace("__cedar"); return err }},
+		{"invalid resource kind", func() error { _, err := NewEntityType("not-a-kind"); return err }},
 		{"invalid IP", func() error { _, err := IPValue("999.1.1.1"); return err }},
 		{"control in request ID", func() error { return WithRequestID("bad\nid")(&AuthRequest{}) }},
 	}
@@ -53,6 +53,36 @@ func TestConstructorsRejectUnsafeValues(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var validation *ValidationError
 			if err := test.make(); !errors.As(err, &validation) {
+				t.Fatalf("got %T %v, want *ValidationError", err, err)
+			}
+		})
+	}
+}
+
+func TestJSONDecodingRequiresRequestDomainFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		decode func() error
+	}{
+		{"group ID", func() error { var value Group; return json.Unmarshal([]byte(`{"namespace":[]}`), &value) }},
+		{"user ID", func() error { var value User; return json.Unmarshal([]byte(`{"namespace":[],"groups":[]}`), &value) }},
+		{"action ID", func() error { var value Action; return json.Unmarshal([]byte(`{"namespace":[]}`), &value) }},
+		{"resource kind", func() error { var value Resource; return json.Unmarshal([]byte(`{"id":"one"}`), &value) }},
+		{"resource ID", func() error { var value Resource; return json.Unmarshal([]byte(`{"kind":"Document"}`), &value) }},
+		{"empty optional request ID", func() error {
+			var value AuthRequest
+			return json.Unmarshal([]byte(`{
+				"id":"",
+				"principal":{"User":{"id":"alice","namespace":[],"groups":[]}},
+				"action":{"id":"view","namespace":[]},
+				"resource":{"kind":"Document","id":"doc-42"}
+			}`), &value)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var validation *ValidationError
+			if err := test.decode(); !errors.As(err, &validation) {
 				t.Fatalf("got %T %v, want *ValidationError", err, err)
 			}
 		})
@@ -138,7 +168,7 @@ func testRequest(t *testing.T) Request {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource, err := NewResource("Document", "doc-42", ResourceWithAttribute("owner", StringValue("alice")))
+	resource, err := NewResource(testEntityType(t, "Document"), "doc-42", ResourceWithAttribute("owner", StringValue("alice")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,4 +177,22 @@ func testRequest(t *testing.T) Request {
 		t.Fatal(err)
 	}
 	return request
+}
+
+func testEntityType(t *testing.T, value string) EntityType {
+	t.Helper()
+	entityType, err := NewEntityType(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return entityType
+}
+
+func testNamespace(t *testing.T, segments ...string) Namespace {
+	t.Helper()
+	namespace, err := NewNamespace(segments...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return namespace
 }

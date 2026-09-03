@@ -8,9 +8,9 @@ import (
 // AuthRequest augments a Request with an optional response-correlation ID and
 // request-scoped Cedar context. Its request fields are flattened on the wire.
 type AuthRequest struct {
-	ID      string               `json:"-"`
-	Context map[string]AttrValue `json:"-"`
-	Request Request              `json:"-"`
+	id      requestID
+	context map[string]AttrValue
+	request Request
 }
 
 // AuthRequestOption configures an AuthRequest.
@@ -19,10 +19,11 @@ type AuthRequestOption func(*AuthRequest) error
 // WithRequestID attaches an ID which the server returns with this batch item.
 func WithRequestID(id string) AuthRequestOption {
 	return func(request *AuthRequest) error {
-		if err := validateRequestID(id); err != nil {
+		validated, err := newRequestID(id)
+		if err != nil {
 			return err
 		}
-		request.ID = id
+		request.id = validated
 		return nil
 	}
 }
@@ -31,7 +32,7 @@ func WithRequestID(id string) AuthRequestOption {
 // omitted from the wire representation.
 func WithContext(context map[string]AttrValue) AuthRequestOption {
 	return func(request *AuthRequest) error {
-		request.Context = make(map[string]AttrValue, len(context))
+		request.context = make(map[string]AttrValue, len(context))
 		for name, value := range context {
 			if err := validateAttributeName("auth_request.context", name); err != nil {
 				return err
@@ -39,7 +40,7 @@ func WithContext(context map[string]AttrValue) AuthRequestOption {
 			if err := value.Validate(); err != nil {
 				return fmt.Errorf("context attribute %q: %w", name, err)
 			}
-			request.Context[name] = value
+			request.context[name] = value
 		}
 		return nil
 	}
@@ -47,7 +48,7 @@ func WithContext(context map[string]AttrValue) AuthRequestOption {
 
 // NewAuthRequest constructs a validated batch item.
 func NewAuthRequest(request Request, options ...AuthRequestOption) (AuthRequest, error) {
-	authRequest := AuthRequest{Request: request}
+	authRequest := AuthRequest{request: request}
 	for _, option := range options {
 		if option == nil {
 			return AuthRequest{}, &ConfigurationError{Message: "nil authorization request option"}
@@ -59,14 +60,34 @@ func NewAuthRequest(request Request, options ...AuthRequestOption) (AuthRequest,
 	return authRequest, authRequest.Validate()
 }
 
+// ID returns the client-provided request ID and whether one is present.
+func (r AuthRequest) ID() (string, bool) {
+	if !r.id.set {
+		return "", false
+	}
+	return r.id.String(), true
+}
+
+// Context returns a copy of the request-scoped Cedar context.
+func (r AuthRequest) Context() map[string]AttrValue {
+	context := make(map[string]AttrValue, len(r.context))
+	for name, value := range r.context {
+		context[name] = value
+	}
+	return context
+}
+
+// Request returns the underlying authorization request.
+func (r AuthRequest) Request() Request { return r.request }
+
 // Validate checks the request, optional ID, context keys, and context values.
 func (r AuthRequest) Validate() error {
-	if r.ID != "" {
-		if err := validateRequestID(r.ID); err != nil {
+	if r.id.set {
+		if err := r.id.validate(); err != nil {
 			return err
 		}
 	}
-	for name, value := range r.Context {
+	for name, value := range r.context {
 		if err := validateAttributeName("auth_request.context", name); err != nil {
 			return err
 		}
@@ -74,7 +95,7 @@ func (r AuthRequest) Validate() error {
 			return fmt.Errorf("context attribute %q: %w", name, err)
 		}
 	}
-	return r.Request.Validate()
+	return r.request.Validate()
 }
 
 // MarshalJSON flattens Request into the AuthRequest object.
@@ -90,15 +111,15 @@ func (r AuthRequest) MarshalJSON() ([]byte, error) {
 		Resource  Resource             `json:"resource"`
 	}
 	return json.Marshal(wire{
-		ID: r.ID, Context: r.Context, Principal: r.Request.Principal,
-		Action: r.Request.Action, Resource: r.Request.Resource,
+		ID: r.id.String(), Context: r.context, Principal: r.request.principal,
+		Action: r.request.action, Resource: r.request.resource,
 	})
 }
 
 // UnmarshalJSON decodes and validates the flattened wire representation.
 func (r *AuthRequest) UnmarshalJSON(data []byte) error {
 	var wire struct {
-		ID        string               `json:"id"`
+		ID        *string              `json:"id"`
 		Context   map[string]AttrValue `json:"context"`
 		Principal Principal            `json:"principal"`
 		Action    Action               `json:"action"`
@@ -107,21 +128,33 @@ func (r *AuthRequest) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	*r = AuthRequest{
-		ID: wire.ID, Context: wire.Context,
-		Request: Request{Principal: wire.Principal, Action: wire.Action, Resource: wire.Resource},
+	request, err := NewRequest(wire.Principal, wire.Action, wire.Resource)
+	if err != nil {
+		return err
 	}
-	return r.Validate()
+	options := make([]AuthRequestOption, 0, 2)
+	if wire.ID != nil {
+		options = append(options, WithRequestID(*wire.ID))
+	}
+	if len(wire.Context) != 0 {
+		options = append(options, WithContext(wire.Context))
+	}
+	parsed, err := NewAuthRequest(request, options...)
+	if err != nil {
+		return err
+	}
+	*r = parsed
+	return nil
 }
 
 // AuthorizeRequest is a batch of authorization checks.
 type AuthorizeRequest struct {
-	Requests []AuthRequest `json:"requests"`
+	requests []AuthRequest
 }
 
 // MarshalJSON preserves an empty requests array for the Treetop wire contract.
 func (r AuthorizeRequest) MarshalJSON() ([]byte, error) {
-	requests := r.Requests
+	requests := r.requests
 	if requests == nil {
 		requests = []AuthRequest{}
 	}
@@ -141,32 +174,52 @@ func (r *AuthorizeRequest) UnmarshalJSON(data []byte) error {
 	if wire.Requests == nil {
 		return &ValidationError{Field: "authorize request", Rule: "must contain a requests array"}
 	}
-	r.Requests = *wire.Requests
+	r.requests = append([]AuthRequest(nil), (*wire.Requests)...)
 	return r.Validate()
 }
 
 // NewAuthorizeRequest constructs and validates a batch. Empty batches are
 // valid because compatible Treetop servers return an empty response.
 func NewAuthorizeRequest(requests ...AuthRequest) (*AuthorizeRequest, error) {
-	batch := &AuthorizeRequest{Requests: append([]AuthRequest(nil), requests...)}
-	if batch.Requests == nil {
-		batch.Requests = []AuthRequest{}
+	batch := &AuthorizeRequest{requests: append([]AuthRequest(nil), requests...)}
+	if batch.requests == nil {
+		batch.requests = []AuthRequest{}
 	}
 	return batch, batch.Validate()
 }
 
 // SingleAuthorizeRequest constructs a one-item authorization batch.
-func SingleAuthorizeRequest(request Request) *AuthorizeRequest {
-	return &AuthorizeRequest{Requests: []AuthRequest{{Request: request}}}
+func SingleAuthorizeRequest(request Request) (*AuthorizeRequest, error) {
+	item, err := NewAuthRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return NewAuthorizeRequest(item)
 }
 
 // RequestsBatch constructs a batch from requests without item IDs or context.
 func RequestsBatch(requests ...Request) (*AuthorizeRequest, error) {
 	items := make([]AuthRequest, len(requests))
 	for i, request := range requests {
-		items[i] = AuthRequest{Request: request}
+		items[i] = AuthRequest{request: request}
 	}
 	return NewAuthorizeRequest(items...)
+}
+
+// Requests returns a copy of the authorization batch items.
+func (r *AuthorizeRequest) Requests() []AuthRequest {
+	if r == nil {
+		return nil
+	}
+	return append([]AuthRequest(nil), r.requests...)
+}
+
+// Len returns the number of authorization checks in the batch.
+func (r *AuthorizeRequest) Len() int {
+	if r == nil {
+		return 0
+	}
+	return len(r.requests)
 }
 
 // Validate checks every request and rejects duplicate item IDs.
@@ -174,35 +227,36 @@ func (r *AuthorizeRequest) Validate() error {
 	if r == nil {
 		return &ValidationError{Field: "authorize request", Rule: "must not be nil"}
 	}
-	ids := make(map[string]struct{}, len(r.Requests))
-	for i, request := range r.Requests {
+	ids := make(map[string]struct{}, len(r.requests))
+	for i, request := range r.requests {
 		if err := request.Validate(); err != nil {
 			return fmt.Errorf("authorize request %d: %w", i, err)
 		}
-		if request.ID == "" {
+		if !request.id.set {
 			continue
 		}
-		if _, exists := ids[request.ID]; exists {
-			return &ValidationError{Field: "request ID", Value: request.ID, Rule: "is duplicated in the batch"}
+		id := request.id.String()
+		if _, exists := ids[id]; exists {
+			return &ValidationError{Field: "request ID", Value: id, Rule: "is duplicated in the batch"}
 		}
-		ids[request.ID] = struct{}{}
+		ids[id] = struct{}{}
 	}
 	return nil
 }
 
 func (r *AuthorizeRequest) validateLimits(limits RequestLimits) error {
-	if limits.MaxBatchSize > 0 && len(r.Requests) > limits.MaxBatchSize {
-		return &ValidationError{Field: "authorization batch", Value: fmt.Sprint(len(r.Requests)), Rule: fmt.Sprintf("contains more than %d requests", limits.MaxBatchSize)}
+	if limits.MaxBatchSize > 0 && len(r.requests) > limits.MaxBatchSize {
+		return &ValidationError{Field: "authorization batch", Value: fmt.Sprint(len(r.requests)), Rule: fmt.Sprintf("contains more than %d requests", limits.MaxBatchSize)}
 	}
-	for i, request := range r.Requests {
-		if len(request.Context) == 0 {
+	for i, request := range r.requests {
+		if len(request.context) == 0 {
 			continue
 		}
-		if len(request.Context) > limits.MaxContextKeys {
-			return &ValidationError{Field: fmt.Sprintf("requests[%d].context", i), Value: fmt.Sprint(len(request.Context)), Rule: fmt.Sprintf("contains more than %d keys", limits.MaxContextKeys)}
+		if len(request.context) > limits.MaxContextKeys {
+			return &ValidationError{Field: fmt.Sprintf("requests[%d].context", i), Value: fmt.Sprint(len(request.context)), Rule: fmt.Sprintf("contains more than %d keys", limits.MaxContextKeys)}
 		}
 		depth := 0
-		for _, value := range request.Context {
+		for _, value := range request.context {
 			if current := attrDepth(value); current > depth {
 				depth = current
 			}
@@ -210,7 +264,7 @@ func (r *AuthorizeRequest) validateLimits(limits RequestLimits) error {
 		if depth > limits.MaxContextDepth {
 			return &ValidationError{Field: fmt.Sprintf("requests[%d].context", i), Value: fmt.Sprint(depth), Rule: fmt.Sprintf("nesting exceeds depth %d", limits.MaxContextDepth)}
 		}
-		encoded, err := json.Marshal(request.Context)
+		encoded, err := json.Marshal(request.context)
 		if err != nil {
 			return fmt.Errorf("encode requests[%d].context: %w", i, err)
 		}

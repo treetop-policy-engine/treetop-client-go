@@ -7,10 +7,22 @@ import (
 	treetop "github.com/treetop-policy-engine/treetop-client-go"
 )
 
+func ExampleNamespace() {
+	namespace, _ := treetop.NewNamespace("MyApp", "Documents")
+	resourceType, _ := treetop.NewEntityType("MyApp::Document")
+
+	fmt.Println(namespace.String())
+	fmt.Println(resourceType.String())
+	// Output:
+	// MyApp::Documents
+	// MyApp::Document
+}
+
 func ExampleNewRequest() {
 	user, _ := treetop.NewUser("alice", treetop.UserWithGroupNames("admins"))
 	action, _ := treetop.NewAction("view")
-	resource, _ := treetop.NewResource("Document", "doc-42",
+	resourceType, _ := treetop.NewEntityType("Document")
+	resource, _ := treetop.NewResource(resourceType, "doc-42",
 		treetop.ResourceWithAttribute("owner", treetop.StringValue("alice")),
 	)
 	request, _ := treetop.NewRequest(treetop.UserPrincipal(user), action, resource)
