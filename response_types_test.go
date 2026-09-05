@@ -113,3 +113,72 @@ func TestDetailedResponseRequiresPolicyJSONObject(t *testing.T) {
 		t.Fatalf("got %T %v, want *InvalidResponseError", err, err)
 	}
 }
+
+func TestPolicyVersionMetadataRoundTripAndLegacyDefaults(t *testing.T) {
+	for _, extra := range []string{"", `,"label_set":null,"generation":0`, `,"label_set":"labels-v2","generation":18446744073709551615`} {
+		input := `{"hash":"abc","loaded_at":"` + testLoadedAt + `"` + extra + `}`
+		var version PolicyVersion
+		if err := json.Unmarshal([]byte(input), &version); err != nil {
+			t.Fatal(err)
+		}
+		if extra == "" && (version.LabelSet != nil || version.Generation != 0) {
+			t.Fatal("incorrect legacy defaults")
+		}
+		encoded, err := json.Marshal(version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var restored PolicyVersion
+		if err := json.Unmarshal(encoded, &restored); err != nil {
+			t.Fatal(err)
+		}
+		if !version.equal(restored) {
+			t.Fatalf("lost metadata: %s", encoded)
+		}
+	}
+}
+
+func TestPolicyVersionRejectsInvalidGeneration(t *testing.T) {
+	for _, generation := range []string{"-1", "18446744073709551616", "true", "1.5", `"1"`} {
+		var version PolicyVersion
+		if err := json.Unmarshal([]byte(`{"generation":`+generation+`}`), &version); err == nil {
+			t.Errorf("accepted generation %s", generation)
+		}
+	}
+}
+
+func TestBatchesCompareCompletePolicyVersion(t *testing.T) {
+	batchVersion := `{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":"labels-v1","generation":1}`
+	for _, test := range []struct {
+		name, itemVersion string
+		valid             bool
+	}{
+		{"equal values in separate allocations", batchVersion, true},
+		{"changed labels", `{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":"labels-v2","generation":1}`, false},
+		{"missing labels", `{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":null,"generation":1}`, false},
+		{"changed generation", `{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":"labels-v1","generation":2}`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := `{"results":[{"index":0,"status":"success","result":{"decision":"Deny","policy":[],"policy_id":"","version":` + test.itemVersion + `}}],"version":` + batchVersion + `,"successful":1,"failed":0}`
+			var brief AuthorizeBriefResponse
+			var detailed AuthorizeDetailedResponse
+			if err := json.Unmarshal([]byte(input), &brief); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal([]byte(input), &detailed); err != nil {
+				t.Fatal(err)
+			}
+			for _, err := range []error{brief.Validate(1), detailed.Validate(1)} {
+				if test.valid && err != nil {
+					t.Fatal(err)
+				}
+				if !test.valid {
+					var invalid *InvalidResponseError
+					if !errors.As(err, &invalid) {
+						t.Fatalf("expected version mismatch, got %v", err)
+					}
+				}
+			}
+		})
+	}
+}

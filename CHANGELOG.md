@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Retain nullable `PolicyVersion.LabelSet` and unsigned `Generation` in wire responses.
+  Older servers default these to `nil` and `0`; JSON serialization includes both fields.
+  Update unkeyed struct literals to include the new fields, or use keyed literals.
+- Reject brief and detailed batches whose item versions differ only in label configuration
+  or generation. Label identifiers compare by string value, including across separate allocations.
+
 ## [0.2.0] - 2026-09-03
 
 ### Added
