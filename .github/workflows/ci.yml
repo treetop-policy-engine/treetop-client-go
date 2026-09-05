@@ -45,13 +45,21 @@ jobs:
       - run: npx --yes markdownlint-cli2@0.20.0 --config .markdownlint.json "**/*.md"
 
   container-e2e:
-    name: Treetop REST v0.0.15 container E2E
+    name: Treetop REST ${{ matrix.server.version }} container E2E
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        server:
+          - version: v0.0.15
+            image: ghcr.io/treetop-policy-engine/treetop-rest@sha256:5248a54f6dc124f344fdc159419a09d714982115478542f2a4f1e59c32cc6fc4
+          - version: v0.0.16
+            image: ghcr.io/treetop-policy-engine/treetop-rest@sha256:2648c6bbd13bd6dae120fe3d1bf95346b6c2c12258d5029d53aab07b985b1d84
     env:
       TREETOP_E2E_CONTAINER: treetop-client-go-e2e
-      # v0.0.15 from the canonical ghcr.io/treetop-policy-engine/treetop-rest package.
-      TREETOP_E2E_IMAGE: ghcr.io/treetop-policy-engine/treetop-rest@sha256:5248a54f6dc124f344fdc159419a09d714982115478542f2a4f1e59c32cc6fc4
+      TREETOP_E2E_VERSION: ${{ matrix.server.version }}
+      TREETOP_E2E_IMAGE: ${{ matrix.server.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

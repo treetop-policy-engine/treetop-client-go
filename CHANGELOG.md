@@ -9,6 +9,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Verify the authenticated container integration suite against REST v0.0.16
+  while retaining the v0.0.15 compatibility checks.
 - Retain nullable `PolicyVersion.LabelSet` and unsigned `Generation` in wire responses.
   Older servers default these to `nil` and `0`; JSON serialization includes both fields.
   Update unkeyed struct literals to include the new fields, or use keyed literals.

@@ -12,6 +12,7 @@ func TestTreetopContainerCompatibility(t *testing.T) {
 	baseURL := integrationEnv(t, "TREETOP_E2E_URL")
 	accessValue := integrationEnv(t, "TREETOP_E2E_ACCESS_TOKEN")
 	uploadValue := integrationEnv(t, "TREETOP_E2E_UPLOAD_TOKEN")
+	expectedVersion := integrationEnv(t, "TREETOP_E2E_VERSION")
 
 	access, err := NewAccessToken(accessValue)
 	if err != nil {
@@ -31,7 +32,7 @@ func TestTreetopContainerCompatibility(t *testing.T) {
 		t.Fatalf("ready probe: ready=%t, err=%v", ready, err)
 	}
 	version, err := client.Version(ctx)
-	if err != nil || version.Version != "v0.0.15" {
+	if err != nil || version.Version != expectedVersion {
 		t.Fatalf("version: %#v, err=%v", version, err)
 	}
 	status, err := client.Status(ctx)
@@ -76,6 +77,18 @@ permit (
 	allowed, err := client.IsAllowed(ctx, request)
 	if err != nil || !allowed {
 		t.Fatalf("authorize: allowed=%t, err=%v", allowed, err)
+	}
+	batch, err := SingleAuthorizeRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Authorize(ctx, batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err = client.Version(ctx)
+	if err != nil || !response.Version.equal(version.Policies) {
+		t.Fatalf("authorization must retain the complete policy version: err=%v", err)
 	}
 
 	policies, err := client.UserPolicies(ctx, "alice", FilterGroups("admins", "operators"))
