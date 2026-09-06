@@ -4,11 +4,48 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 )
 
 type responseValidator interface {
 	validateResponse() error
+}
+
+// policyVersionWire validates the new scalar while the containing response is
+// decoded, avoiding another JSON pass over every version in a batch.
+type policyVersionWire struct {
+	Hash       string            `json:"hash"`
+	LoadedAt   time.Time         `json:"loaded_at"`
+	LabelSet   *string           `json:"label_set"`
+	Generation versionGeneration `json:"generation"`
+}
+
+type versionGeneration uint64
+
+func (g *versionGeneration) UnmarshalJSON(data []byte) error {
+	// encoding/json checks JSON syntax first; ParseUint rejects null, negatives,
+	// fractions, exponents, strings, booleans, and values outside the u64 range.
+	value, err := strconv.ParseUint(string(data), 10, 64)
+	if err != nil {
+		return invalidResponse("policy version generation must be an unsigned 64-bit integer")
+	}
+	*g = versionGeneration(value)
+	return nil
+}
+
+func (v policyVersionWire) version() PolicyVersion {
+	return PolicyVersion{Hash: v.Hash, LoadedAt: v.LoadedAt, LabelSet: v.LabelSet, Generation: uint64(v.Generation)}
+}
+
+// UnmarshalJSON defaults an omitted legacy generation to zero but rejects null.
+func (v *PolicyVersion) UnmarshalJSON(data []byte) error {
+	var wire policyVersionWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*v = wire.version()
+	return nil
 }
 
 func (v PolicyVersion) validateResponse(field string) error {
@@ -34,10 +71,10 @@ func (v *VersionInfo) validateResponse() error {
 // UnmarshalJSON requires every field mandated by the v0.0.15 version response.
 func (v *VersionInfo) UnmarshalJSON(data []byte) error {
 	var wire struct {
-		Version  *string        `json:"version"`
-		Core     *CoreVersion   `json:"core"`
-		Policies *PolicyVersion `json:"policies"`
-		Schema   *PolicyVersion `json:"schema"`
+		Version  *string            `json:"version"`
+		Core     *CoreVersion       `json:"core"`
+		Policies *policyVersionWire `json:"policies"`
+		Schema   *policyVersionWire `json:"schema"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -45,7 +82,12 @@ func (v *VersionInfo) UnmarshalJSON(data []byte) error {
 	if wire.Version == nil || wire.Core == nil || wire.Policies == nil {
 		return invalidResponse("version response is missing required fields")
 	}
-	*v = VersionInfo{Version: *wire.Version, Core: *wire.Core, Policies: *wire.Policies, Schema: wire.Schema}
+	var schema *PolicyVersion
+	if wire.Schema != nil {
+		value := wire.Schema.version()
+		schema = &value
+	}
+	*v = VersionInfo{Version: *wire.Version, Core: *wire.Core, Policies: wire.Policies.version(), Schema: schema}
 	return v.validateResponse()
 }
 
@@ -61,9 +103,9 @@ func (p PermitPolicy) validateResponse(index int) error {
 // policy_id for Deny decisions.
 func (d *AuthorizeDecisionBrief) UnmarshalJSON(data []byte) error {
 	var wire struct {
-		Decision *Decision      `json:"decision"`
-		Version  *PolicyVersion `json:"version"`
-		PolicyID *string        `json:"policy_id"`
+		Decision *Decision          `json:"decision"`
+		Version  *policyVersionWire `json:"version"`
+		PolicyID *string            `json:"policy_id"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -71,7 +113,7 @@ func (d *AuthorizeDecisionBrief) UnmarshalJSON(data []byte) error {
 	if wire.Decision == nil || wire.Version == nil || wire.PolicyID == nil {
 		return invalidResponse("brief authorization decision is missing required fields")
 	}
-	*d = AuthorizeDecisionBrief{Decision: *wire.Decision, Version: *wire.Version, PolicyID: *wire.PolicyID}
+	*d = AuthorizeDecisionBrief{Decision: *wire.Decision, Version: wire.Version.version(), PolicyID: *wire.PolicyID}
 	return nil
 }
 
@@ -79,9 +121,9 @@ func (d *AuthorizeDecisionBrief) UnmarshalJSON(data []byte) error {
 // matching policies.
 func (d *AuthorizeDecisionDetailed) UnmarshalJSON(data []byte) error {
 	var wire struct {
-		Policies *[]PermitPolicy `json:"policy"`
-		Decision *Decision       `json:"decision"`
-		Version  *PolicyVersion  `json:"version"`
+		Policies *[]PermitPolicy    `json:"policy"`
+		Decision *Decision          `json:"decision"`
+		Version  *policyVersionWire `json:"version"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -89,7 +131,7 @@ func (d *AuthorizeDecisionDetailed) UnmarshalJSON(data []byte) error {
 	if wire.Policies == nil || wire.Decision == nil || wire.Version == nil {
 		return invalidResponse("detailed authorization decision is missing required fields")
 	}
-	*d = AuthorizeDecisionDetailed{Policies: *wire.Policies, Decision: *wire.Decision, Version: *wire.Version}
+	*d = AuthorizeDecisionDetailed{Policies: *wire.Policies, Decision: *wire.Decision, Version: wire.Version.version()}
 	return nil
 }
 
@@ -98,7 +140,7 @@ func (d *AuthorizeDecisionDetailed) UnmarshalJSON(data []byte) error {
 func (r *AuthorizeResponse[T]) UnmarshalJSON(data []byte) error {
 	var wire struct {
 		Results    *[]IndexedResult[T] `json:"results"`
-		Version    *PolicyVersion      `json:"version"`
+		Version    *policyVersionWire  `json:"version"`
 		Successful *int                `json:"successful"`
 		Failed     *int                `json:"failed"`
 	}
@@ -108,7 +150,7 @@ func (r *AuthorizeResponse[T]) UnmarshalJSON(data []byte) error {
 	if wire.Results == nil || wire.Version == nil || wire.Successful == nil || wire.Failed == nil {
 		return invalidResponse("authorization response is missing required fields")
 	}
-	*r = AuthorizeResponse[T]{Results: *wire.Results, Version: *wire.Version, Successful: *wire.Successful, Failed: *wire.Failed}
+	*r = AuthorizeResponse[T]{Results: *wire.Results, Version: wire.Version.version(), Successful: *wire.Successful, Failed: *wire.Failed}
 	return nil
 }
 

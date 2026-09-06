@@ -18,14 +18,22 @@ const (
 	DecisionDeny Decision = "Deny"
 )
 
-// PolicyVersion identifies the policy snapshot used for evaluation.
+// PolicyVersion identifies the policy and label state used for evaluation.
 type PolicyVersion struct {
 	Hash     string    `json:"hash"`
 	LoadedAt time.Time `json:"loaded_at"`
+	// LabelSet is a stable label configuration identifier when supplied by the server.
+	LabelSet *string `json:"label_set"`
+	// Generation is local to one engine instance and can restart on replacement.
+	// Older servers omit it, which defaults to zero.
+	Generation uint64 `json:"generation"`
 }
 
 func (v PolicyVersion) equal(other PolicyVersion) bool {
-	return v.Hash == other.Hash && v.LoadedAt.Equal(other.LoadedAt)
+	labelsEqual := v.LabelSet == nil && other.LabelSet == nil ||
+		v.LabelSet != nil && other.LabelSet != nil && *v.LabelSet == *other.LabelSet
+	return v.Hash == other.Hash && v.LoadedAt.Equal(other.LoadedAt) &&
+		labelsEqual && v.Generation == other.Generation
 }
 
 // CoreVersion identifies the Treetop core and Cedar engine versions.

@@ -3,19 +3,21 @@
 An idiomatic Go client for [Treetop REST](https://github.com/treetop-policy-engine/treetop-rest),
 the Cedar-based policy authorization service.
 
-The client currently targets the Treetop REST v0.0.15 wire contract. It uses only the Go standard
+The client currently targets the Treetop REST v0.0.16 wire contract and retains v0.0.15 compatibility.
+It uses only the Go standard
 library.
 
 ## Compatibility
 
 | Go client | Treetop REST contract | Minimum Go | Status |
 | --- | --- | --- | --- |
+| Unreleased | `v0.0.15`, [`v0.0.16`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.16) | 1.25.13 | Complete policy-version metadata and consistency checks |
 | `v0.2.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.25.13 | Current builder, input-spec, and typed construction APIs |
 | `v0.1.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Opaque request-domain API |
 | `v0.0.1` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Initial API; superseded by `v0.1.x` |
 
 CI tests the minimum Go 1.25.13 release and the current stable Go release. It also runs the client
-against the official v0.0.15 Treetop REST container pinned by image digest. The table records the
+against the official v0.0.15 and v0.0.16 Treetop REST containers pinned by image digest. The table records the
 server wire contract targeted by each client line; server versions not listed are not formally
 supported. Some older responses remain decodable where omitted fields have safe defaults, but that
 does not constitute a compatibility guarantee.
@@ -314,6 +316,13 @@ if errors.As(err, &apiError) {
 ```
 
 See [docs/api.md](docs/api.md) for the endpoint and wire-format reference.
+
+## Authorization state versions
+
+`PolicyVersion` retains the policy hash, load time, nullable `LabelSet`, and `Generation`.
+Generation is local to one engine instance and can restart when that engine is replaced.
+Older responses default the new fields to `nil` and `0`. Batch validation compares all four fields.
+An explicit null generation is invalid; only an omitted generation defaults to zero.
 
 ## License
 

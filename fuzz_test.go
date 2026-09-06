@@ -80,6 +80,8 @@ func FuzzBaseURL(f *testing.F) {
 func FuzzAuthorizationResultJSON(f *testing.F) {
 	f.Add(`{"index":0,"status":"failed","error":"bad input"}`)
 	f.Add(`{"index":0,"status":"success","result":{"decision":"Deny","policy_id":"","version":{"hash":"abc","loaded_at":"2026-09-03T07:00:00Z"}}}`)
+	f.Add(`{"index":0,"status":"success","result":{"decision":"Deny","policy_id":"","version":{"hash":"abc","loaded_at":"2026-09-03T07:00:00Z","label_set":"labels-v1","generation":18446744073709551615}}}`)
+	f.Add(`{"index":0,"status":"success","result":{"decision":"Deny","policy_id":"","version":{"hash":"abc","loaded_at":"2026-09-03T07:00:00Z","generation":null}}}`)
 	f.Fuzz(func(t *testing.T, input string) {
 		var result IndexedResult[AuthorizeDecisionBrief]
 		_ = json.Unmarshal([]byte(input), &result)

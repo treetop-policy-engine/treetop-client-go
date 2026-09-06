@@ -3,8 +3,33 @@ package treetop
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 )
+
+func BenchmarkAuthorizationResponseParsing(b *testing.B) {
+	for _, size := range []int{1, 128} {
+		b.Run(fmt.Sprintf("batch-%d", size), func(b *testing.B) {
+			version := `{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":"labels-v1","generation":7}`
+			items := make([]string, size)
+			for i := range items {
+				items[i] = fmt.Sprintf(`{"index":%d,"status":"success","result":{"decision":"Deny","policy_id":"","version":%s}}`, i, version)
+			}
+			data := []byte(fmt.Sprintf(`{"results":[%s],"version":%s,"successful":%d,"failed":0}`, strings.Join(items, ","), version, size))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				var response AuthorizeBriefResponse
+				if err := json.Unmarshal(data, &response); err != nil {
+					b.Fatal(err)
+				}
+				if err := response.Validate(size); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
 
 func BenchmarkAuthorizationRequestEncoding(b *testing.B) {
 	for _, size := range []int{1, 32, 1024} {
