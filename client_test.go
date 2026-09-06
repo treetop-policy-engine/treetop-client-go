@@ -35,8 +35,8 @@ func TestAuthorizeSendsExactContractAndCredentials(t *testing.T) {
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(response, `{
 			"results":[{"index":0,"id":"check-1","status":"success","result":{
-				"decision":"Allow","version":{"hash":"abc","loaded_at":"`+testLoadedAt+`"},"policy_id":"policy0"}}],
-			"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`"},"successful":1,"failed":0}`)
+				"decision":"Allow","version":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0},"policy_id":"policy0"}}],
+			"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0},"successful":1,"failed":0}`)
 	}))
 	defer server.Close()
 
@@ -67,7 +67,7 @@ func TestAuthorizeSendsExactContractAndCredentials(t *testing.T) {
 
 func TestPublicEndpointsOmitAccessToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		protected := request.URL.Path == "/api/v1/health" || request.URL.Path == "/metrics"
+		protected := request.URL.Path == "/metrics"
 		if got := request.Header.Get("Authorization"); protected && got == "" || !protected && got != "" {
 			t.Errorf("path %s has unexpected Authorization %q", request.URL.Path, got)
 		}
@@ -96,9 +96,6 @@ func TestPublicEndpointsOmitAccessToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := client.OpenAPI(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := client.Health(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := client.Metrics(ctx); err != nil {
@@ -155,7 +152,7 @@ func TestClientsDenyRedirects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = client.Health(context.Background())
+			_, err = client.Metrics(context.Background())
 			var apiError *APIError
 			if !errors.As(err, &apiError) || apiError.StatusCode != http.StatusFound {
 				t.Fatalf("got %T %v, want redirect API error", err, err)
@@ -203,8 +200,8 @@ func TestMalformedAuthorizationResponseIsRejected(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(response, `{
 			"results":[{"index":0,"status":"success","result":{
-				"decision":"Deny","version":{"hash":"abc","loaded_at":"`+testLoadedAt+`"},"policy_id":"policy0"}}],
-			"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`"},"successful":1,"failed":0}`)
+				"decision":"Deny","version":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0},"policy_id":"policy0"}}],
+			"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0},"successful":1,"failed":0}`)
 	}))
 	defer server.Close()
 	client, err := New(server.URL)
@@ -284,7 +281,7 @@ func TestNilContextIsRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.Health(nil)
+	_, err = client.Metrics(nil)
 	var config *ConfigurationError
 	if !errors.As(err, &config) {
 		t.Fatalf("got %T %v, want *ConfigurationError", err, err)
@@ -301,7 +298,7 @@ func TestAPIErrorPreservesCodeAndDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.Health(context.Background())
+	_, err = client.Metrics(context.Background())
 	var apiError *APIError
 	if !errors.As(err, &apiError) {
 		t.Fatalf("got %T %v, want *APIError", err, err)

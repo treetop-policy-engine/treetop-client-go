@@ -9,19 +9,6 @@ import (
 	"net/url"
 )
 
-// Health checks the legacy protected GET /api/v1/health endpoint.
-func (c *Client) Health(ctx context.Context) error {
-	response, err := c.send(ctx, requestSpec{method: http.MethodGet, url: c.endpoint("health"), protected: true})
-	if err != nil {
-		return err
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return c.apiError(response, nil)
-	}
-	_, err = readBounded(response, min64(defaultErrorBodyBytes, c.maxResponseBytes))
-	return err
-}
-
 // Live checks the canonical public GET /livez process probe.
 func (c *Client) Live(ctx context.Context) error {
 	response, err := c.send(ctx, requestSpec{method: http.MethodGet, url: c.rootEndpoint("livez"), accept: "text/plain"})

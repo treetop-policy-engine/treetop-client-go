@@ -44,7 +44,7 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
 - `cedar_types.go` owns immutable Cedar namespaces, entity types, and internal validated scalar
   representations.
 - `request_types.go` and `authorization_request.go` own request-domain values and validation.
-- `response_types.go` owns server-facing results, metadata, compatibility defaults, and response
+- `response_types.go` owns server-facing results, metadata, required current fields, and response
   consistency checks.
 - Keep public examples in `example_test.go` so documentation examples compile.
 
@@ -66,7 +66,7 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
   must keep invariant-bearing fields private and expose defensive-copy accessors for slices and
   maps.
 
-## Wire compatibility
+## Strict current wire contract
 
 - Treat the canonical
   [Treetop REST repository](https://github.com/treetop-policy-engine/treetop-rest)—especially its
@@ -78,14 +78,15 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
 - Assert exact JSON for every changed request shape. A Go round trip alone is not proof of server
   compatibility.
 - Preserve unknown string enum values when newer servers may add variants.
-- Apply safe defaults only when an omitted older-server field has an unambiguous meaning.
+- Prioritize correctness over compatibility in early releases. Require current metadata and
+  remove obsolete defaults, aliases, and deprecated APIs with explicit migration notes.
+- Exact unmerged candidate pins are permitted for coordinated verification. Do not merge or
+  release before user approval.
 - Validate response counts, indices, IDs, policy versions, decisions, and policy consistency before
   returning authorization results.
 - Update `docs/api.md`, README compatibility text, tests, and the changelog when targeting a new
   server contract.
-- Keep the versioned compatibility matrix in `README.md` current for every release. Compatibility
-  claims must name the client line, Treetop REST contract, and minimum Go version, and must not
-  extend beyond tested behavior.
+- Test the current contract against an immutable REST candidate and update its pin with the docs.
 
 ## Security boundaries
 

@@ -2,3 +2,5 @@
 /treetop-client-go.test
 *.prof
 *.test
+
+.candidate-rest/
