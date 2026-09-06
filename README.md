@@ -8,7 +8,7 @@ standard library. This is a breaking release; see [MIGRATION.md](MIGRATION.md).
 
 ## Current contract
 
-CI tests Go 1.25.13 and current stable Go, then builds an immutable REST candidate
+CI tests Go 1.25.13 and current stable Go, then uses an immutable REST release image
 and runs authenticated integration tests against it. Early releases prioritize
 correctness over compatibility. Old response defaults and legacy aliases are
 removed; malformed authorization responses fail closed.

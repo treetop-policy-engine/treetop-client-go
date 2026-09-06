@@ -45,28 +45,21 @@ jobs:
       - run: npx --yes markdownlint-cli2@0.20.0 --config .markdownlint.json "**/*.md"
 
   container-e2e:
-    name: Current REST 0.1.0 candidate E2E
+    name: Current REST 0.1.0 release E2E
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       TREETOP_E2E_CONTAINER: treetop-client-go-e2e
       TREETOP_E2E_VERSION: 0.1.0
-      TREETOP_E2E_IMAGE: treetop-rest-candidate:0.1.0
+      TREETOP_E2E_IMAGE: ghcr.io/treetop-policy-engine/treetop-rest@sha256:d1fdd7536f31dde0b922f9516baa16a1f5ee7ecd4ab1c0892afd555128acc43e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.25.13"
           check-latest: true
-      - name: Check out exact REST candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: treetop-policy-engine/treetop-rest
-          ref: fce2e1fa8f44244c201dd87731ba63e5f203a8e0
-          path: .candidate-rest
-          persist-credentials: false
-      - name: Build candidate server
-        run: docker build -t treetop-rest-candidate:0.1.0 .candidate-rest
+      - name: Pull verified REST release image
+        run: docker pull "$TREETOP_E2E_IMAGE"
       - name: Start pinned Treetop container
         shell: bash
         run: |

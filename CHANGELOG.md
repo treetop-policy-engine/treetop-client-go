@@ -18,7 +18,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and explicit batch limits. Zero is a real limit, not an unlimited fallback.
 - Use a required value for `PoliciesMetadata.Schema` and the distinct
   `SchemaVersion` type for optional schema revisions in `VersionInfo`.
-- Verify the immutable coordinated REST candidate instead of historical server
+- Verify the immutable REST 0.1.0 release image instead of historical server
   versions. Migrate label rules to declared targets and bundle format 2; rebuild
   and re-sign archives. See [MIGRATION.md](MIGRATION.md).
 - Preserve complete batch version coherence, including label identifiers by

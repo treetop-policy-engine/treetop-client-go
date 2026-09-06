@@ -35,6 +35,5 @@ Sanitization follows scope, so constrain resource types before trusting labels.
 Set source bundle/module manifests to format 2, rebuild archives, and re-sign.
 Old archives and syntax are rejected. Upload failures preserve the active state.
 
-CI builds the exact REST candidate before authenticated integration tests.
-After approval, release Core, Bundle, and REST before this client. Preparing this
-PR does not authorize any merge or publication.
+CI runs authenticated integration tests against the immutable REST 0.1.0 release
+image pinned in its workflow. Release Core, Bundle, and REST before this client.

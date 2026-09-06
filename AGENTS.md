@@ -86,7 +86,7 @@ npx markdownlint-cli2 --config .markdownlint.json "**/*.md"
   returning authorization results.
 - Update `docs/api.md`, README compatibility text, tests, and the changelog when targeting a new
   server contract.
-- Test the current contract against an immutable REST candidate and update its pin with the docs.
+- Test the current contract against an immutable REST release and update its pin with the docs.
 
 ## Security boundaries
 
