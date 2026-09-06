@@ -23,30 +23,24 @@ func TestBatchResultRequiresValidTaggedShape(t *testing.T) {
 	}
 }
 
-func TestMetadataSourceCurrentAndLegacyShapes(t *testing.T) {
-	for _, input := range []string{`{"url":"https://example.com/policies"}`, `"https://example.com/legacy"`} {
-		var source MetadataSource
-		if err := json.Unmarshal([]byte(input), &source); err != nil {
-			t.Fatalf("decode %s: %v", input, err)
-		}
-		if source.URL == "" {
-			t.Fatal("source URL is empty")
+func TestMetadataSourceRequiresObject(t *testing.T) {
+	var source MetadataSource
+	if err := json.Unmarshal([]byte(`{"url":"https://example.com/policies"}`), &source); err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range []string{`"https://example.com/legacy"`, `{}`, `null`, `{"url":"https://example.com","old":true}`} {
+		if err := json.Unmarshal([]byte(input), &source); err == nil {
+			t.Fatalf("accepted %s", input)
 		}
 	}
 }
 
-func TestStatusAppliesLegacyDefaults(t *testing.T) {
+func TestStatusRejectsMissingCapabilities(t *testing.T) {
 	input := `{"policy_configuration":` + testPoliciesMetadataJSON + `,
-		"parallel_configuration":{"cpu_count":1,"workers":1,"rayon_threads":1,"par_threshold":8,"allow_parallel":false}}`
+ "parallel_configuration":{"cpu_count":1,"workers":1,"rayon_threads":1,"par_threshold":8,"allow_parallel":false}}`
 	var status StatusResponse
-	if err := json.Unmarshal([]byte(input), &status); err != nil {
-		t.Fatal(err)
-	}
-	if status.RequestLimits != legacyRequestLimits() {
-		t.Fatalf("got %#v, want legacy request limits", status.RequestLimits)
-	}
-	if status.RequestContext.Supported {
-		t.Fatal("legacy response must not claim context support")
+	if err := json.Unmarshal([]byte(input), &status); err == nil {
+		t.Fatal("accepted old status without capabilities")
 	}
 }
 
@@ -102,8 +96,8 @@ func TestDetailedResponseRequiresPolicyJSONObject(t *testing.T) {
 	input := `{
 		"results":[{"index":0,"status":"success","result":{"decision":"Allow","policy":[
 			{"literal":"permit();","json":"not an object","cedar_id":"policy0"}],
-			"version":{"hash":"abc","loaded_at":"` + testLoadedAt + `"}}}],
-		"version":{"hash":"abc","loaded_at":"` + testLoadedAt + `"},"successful":1,"failed":0}`
+			"version":{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":null,"generation":0}}}],
+		"version":{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":null,"generation":0},"successful":1,"failed":0}`
 	var response AuthorizeDetailedResponse
 	if err := json.Unmarshal([]byte(input), &response); err != nil {
 		t.Fatal(err)
@@ -114,13 +108,12 @@ func TestDetailedResponseRequiresPolicyJSONObject(t *testing.T) {
 	}
 }
 
-func TestPolicyVersionMetadataRoundTripAndLegacyDefaults(t *testing.T) {
+func TestPolicyVersionMetadataRoundTrip(t *testing.T) {
 	for _, test := range []struct {
 		extra      string
 		generation uint64
 		labels     string
 	}{
-		{"", 0, ""},
 		{`,"label_set":null,"generation":0`, 0, ""},
 		{`,"label_set":"labels-v2","generation":18446744073709551615`, ^uint64(0), "labels-v2"},
 	} {
@@ -195,7 +188,7 @@ func TestBatchesCompareCompletePolicyVersion(t *testing.T) {
 }
 
 func TestBatchesRejectNullGeneration(t *testing.T) {
-	validVersion := `{"hash":"abc","loaded_at":"` + testLoadedAt + `","generation":0}`
+	validVersion := `{"hash":"abc","loaded_at":"` + testLoadedAt + `","label_set":null,"generation":0}`
 	nullVersion := `{"hash":"abc","loaded_at":"` + testLoadedAt + `","generation":null}`
 	for _, versions := range [][2]string{{nullVersion, validVersion}, {validVersion, nullVersion}} {
 		input := `{"results":[{"index":0,"status":"success","result":{"decision":"Deny","policy":[],"policy_id":"","version":` + versions[0] + `}}],"version":` + versions[1] + `,"successful":1,"failed":0}`
@@ -207,5 +200,49 @@ func TestBatchesRejectNullGeneration(t *testing.T) {
 				t.Fatalf("expected invalid generation, got %v", err)
 			}
 		}
+	}
+}
+
+func TestPolicyVersionRequiresEveryFieldAtEveryBoundary(t *testing.T) {
+	complete := map[string]any{"hash": "abc", "loaded_at": testLoadedAt, "label_set": nil, "generation": 0}
+	for _, missing := range []string{"hash", "loaded_at", "label_set", "generation"} {
+		data := make(map[string]any)
+		for key, value := range complete {
+			if key != missing {
+				data[key] = value
+			}
+		}
+		encoded, err := json.Marshal(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var version PolicyVersion
+		if err := json.Unmarshal(encoded, &version); err == nil {
+			t.Errorf("accepted omitted %s", missing)
+		}
+		batch := `{"results":[],"version":` + string(encoded) + `,"successful":0,"failed":0}`
+		var response AuthorizeBriefResponse
+		if err := json.Unmarshal([]byte(batch), &response); err == nil {
+			t.Errorf("batch accepted omitted %s", missing)
+		}
+	}
+}
+
+func TestSchemaVersionRequiresOnlySchemaFields(t *testing.T) {
+	var version SchemaVersion
+	if err := json.Unmarshal([]byte(`{"hash":"schema","loaded_at":"`+testLoadedAt+`"}`), &version); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(`{"hash":"schema"}`), &version); err == nil {
+		t.Fatal("accepted missing timestamp")
+	}
+}
+
+func TestExplicitZeroBatchLimitRejectsNonemptyBatches(t *testing.T) {
+	batch := benchmarkAuthorizationRequest(t, 1)
+	limits := DefaultRequestLimits()
+	limits.MaxBatchSize = 0
+	if err := batch.validateLimits(limits); err == nil {
+		t.Fatal("zero batch limit treated as unlimited")
 	}
 }

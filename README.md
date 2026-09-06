@@ -3,24 +3,15 @@
 An idiomatic Go client for [Treetop REST](https://github.com/treetop-policy-engine/treetop-rest),
 the Cedar-based policy authorization service.
 
-The client currently targets the Treetop REST v0.0.16 wire contract and retains v0.0.15 compatibility.
-It uses only the Go standard
-library.
+Go client 0.3.0 targets the strict Treetop REST 0.1.0 contract using only the Go
+standard library. This is a breaking release; see [MIGRATION.md](MIGRATION.md).
 
-## Compatibility
+## Current contract
 
-| Go client | Treetop REST contract | Minimum Go | Status |
-| --- | --- | --- | --- |
-| Unreleased | `v0.0.15`, [`v0.0.16`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.16) | 1.25.13 | Complete policy-version metadata and consistency checks |
-| `v0.2.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.25.13 | Current builder, input-spec, and typed construction APIs |
-| `v0.1.x` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Opaque request-domain API |
-| `v0.0.1` | [`v0.0.15`](https://github.com/treetop-policy-engine/treetop-rest/releases/tag/v0.0.15) | 1.23 | Initial API; superseded by `v0.1.x` |
-
-CI tests the minimum Go 1.25.13 release and the current stable Go release. It also runs the client
-against the official v0.0.15 and v0.0.16 Treetop REST containers pinned by image digest. The table records the
-server wire contract targeted by each client line; server versions not listed are not formally
-supported. Some older responses remain decodable where omitted fields have safe defaults, but that
-does not constitute a compatibility guarantee.
+CI tests Go 1.25.13 and current stable Go, then uses an immutable REST release image
+and runs authenticated integration tests against it. Early releases prioritize
+correctness over compatibility. Old response defaults and legacy aliases are
+removed; malformed authorization responses fail closed.
 
 ## Features
 

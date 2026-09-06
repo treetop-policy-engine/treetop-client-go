@@ -7,16 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed
+## [0.3.0] - 2026-09-06
 
-- Verify the authenticated container integration suite against REST v0.0.16
-  while retaining the v0.0.15 compatibility checks.
-- Retain nullable `PolicyVersion.LabelSet` and unsigned `Generation` in wire responses.
-  Older servers default these to `nil` and `0`; JSON serialization includes both fields.
-  Update unkeyed struct literals to include the new fields, or use keyed literals.
-- Reject brief and detailed batches whose item versions differ only in label configuration
-  or generation. Label identifiers compare by string value, including across separate allocations.
-- Reject an explicit null generation rather than treating it as an omitted legacy field.
+### Breaking changes
+
+- Target REST 0.1.0 with complete policy/label versions and current status fields.
+  Omitted version fields no longer default to nil or zero. Reject null, negative,
+  fractional, boolean, string, and overflowing generation values.
+- Remove `Client.Health`; use `Live` or `Ready`. Require object metadata sources
+  and explicit batch limits. Zero is a real limit, not an unlimited fallback.
+- Use a required value for `PoliciesMetadata.Schema` and the distinct
+  `SchemaVersion` type for optional schema revisions in `VersionInfo`.
+- Verify the immutable REST 0.1.0 release image instead of historical server
+  versions. Migrate label rules to declared targets and bundle format 2; rebuild
+  and re-sign archives. See [MIGRATION.md](MIGRATION.md).
+- Preserve complete batch version coherence, including label identifiers by
+  string value and engine generation.
 
 ## [0.2.0] - 2026-09-03
 
@@ -100,7 +106,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Refuse credentials over remote plaintext HTTP by default, omit access credentials from public
   probes and OpenAPI retrieval, deny redirects, and redact reflected credentials from API errors.
 
-[Unreleased]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.3.0...HEAD
 [0.2.0]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/treetop-policy-engine/treetop-client-go/releases/tag/v0.0.1
+
+[0.3.0]: https://github.com/treetop-policy-engine/treetop-client-go/compare/v0.2.0...v0.3.0

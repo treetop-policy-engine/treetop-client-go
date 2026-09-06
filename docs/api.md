@@ -3,12 +3,12 @@
 Treetop application endpoints are rooted at `/api/v1`. Operational endpoints are relative to the
 configured base URL path.
 
-The client is tested against REST v0.0.15 and v0.0.16. In v0.0.16, `PolicyVersion`
-includes nullable `label_set` and unsigned 64-bit `generation` alongside `hash` and
-`loaded_at`. Older responses default the added fields to `nil` and `0`. Brief and
-detailed batches must agree on every version field; label identifiers compare by
-string value, including across separate allocations. An explicit null generation is invalid;
-only an omitted generation defaults to zero.
+The client targets REST 0.1.0. `PolicyVersion` requires `hash`, `loaded_at`,
+nullable `label_set`, and unsigned 64-bit `generation`. Omitted fields and null
+generations are invalid. Brief and detailed batch items must agree on every
+version field. Schema revisions use the distinct `SchemaVersion` type with
+required `hash` and `loaded_at`. REST and Core version strings report package
+versions without Git descriptions or a `v` prefix.
 
 ## Endpoint mapping
 
@@ -17,7 +17,6 @@ only an omitted generation defaults to zero.
 | GET | `/livez` | `Client.Live` | error only |
 | GET | `/readyz` | `Client.Ready` | bool; 503 maps to false |
 | GET | `/openapi.json` | `Client.OpenAPI` | validated `json.RawMessage` |
-| GET | `/api/v1/health` | `Client.Health` | error only |
 | GET | `/api/v1/version` | `Client.Version` | `VersionInfo` |
 | GET | `/api/v1/status` | `Client.Status` | `StatusResponse` |
 | POST | `/api/v1/authorize?detail=brief` | `Client.Authorize` | `AuthorizeBriefResponse` |
@@ -156,20 +155,19 @@ values. The global namespace is not a meaningful filter and is rejected. `Filter
 repeated `groups[]` values. These filters affect policy listing; they do not construct a `User`.
 The user ID is encoded as exactly one URL path segment, including spaces and slashes.
 
-## Metadata and compatibility
+## Metadata
 
-`MetadataSource` decodes the current `{"url":"https://..."}` form and the legacy bare string form.
-Unknown `PolicyMatchReason` and `RequestContextFallbackReason` string values remain accessible for
-forward compatibility. Structured responses require the fields mandated by the v0.0.15 contract;
-missing objects and arrays are rejected instead of being returned as misleading zero values.
-Missing legacy status limits default to an unknown batch limit, 16 KiB, depth 8, and 64 keys;
-missing context capability defaults to unsupported. `DefaultRequestLimits` uses the current server
-defaults of 1,024 batch items, 16 KiB, depth 8, and 64 keys. `PoliciesMetadata.Bundle` carries
-v0.0.15 atomic-bundle metadata when present.
+`MetadataSource` requires the object `{"url":"https://..."}` with no extra fields.
+Unknown `PolicyMatchReason` and `RequestContextFallbackReason` values remain
+accessible. Structured responses require current objects and arrays, including
+schema metadata, request limits, and context capabilities. Missing fields are
+errors. `DefaultRequestLimits` uses 1,024 batch items, 16 KiB, depth 8, and 64 keys.
+An explicit zero batch limit rejects nonempty batches; it never means unlimited.
+`PoliciesMetadata.Bundle` carries format 2 atomic-bundle metadata when present.
 
 ## Errors and limits
 
-Current server errors have this shape; older responses containing only `error` are also accepted:
+Server errors have this shape. Nonconforming error bodies remain bounded and redacted diagnostic errors:
 
 ```json
 {

@@ -12,16 +12,32 @@ type responseValidator interface {
 	validateResponse() error
 }
 
-// policyVersionWire validates the new scalar while the containing response is
-// decoded, avoiding another JSON pass over every version in a batch.
+// policyVersionWire records required scalar presence during containing-response
+// decoding, avoiding another JSON pass over every complete version in a batch.
 type policyVersionWire struct {
 	Hash       string            `json:"hash"`
 	LoadedAt   time.Time         `json:"loaded_at"`
-	LabelSet   *string           `json:"label_set"`
+	LabelSet   requiredLabelSet  `json:"label_set"`
 	Generation versionGeneration `json:"generation"`
 }
 
-type versionGeneration uint64
+type versionGeneration struct {
+	value   uint64
+	present bool
+}
+
+type requiredLabelSet struct {
+	value   *string
+	present bool
+}
+
+func (l *requiredLabelSet) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &l.value); err != nil {
+		return err
+	}
+	l.present = true
+	return nil
+}
 
 func (g *versionGeneration) UnmarshalJSON(data []byte) error {
 	// encoding/json checks JSON syntax first; ParseUint rejects null, negatives,
@@ -30,21 +46,51 @@ func (g *versionGeneration) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return invalidResponse("policy version generation must be an unsigned 64-bit integer")
 	}
-	*g = versionGeneration(value)
+	*g = versionGeneration{value: value, present: true}
 	return nil
 }
 
-func (v policyVersionWire) version() PolicyVersion {
-	return PolicyVersion{Hash: v.Hash, LoadedAt: v.LoadedAt, LabelSet: v.LabelSet, Generation: uint64(v.Generation)}
+func (v policyVersionWire) version() (PolicyVersion, error) {
+	if !v.LabelSet.present || !v.Generation.present {
+		return PolicyVersion{}, invalidResponse("policy version requires label_set and generation")
+	}
+	version := PolicyVersion{Hash: v.Hash, LoadedAt: v.LoadedAt, LabelSet: v.LabelSet.value, Generation: v.Generation.value}
+	return version, version.validateResponse("policy version")
 }
 
-// UnmarshalJSON defaults an omitted legacy generation to zero but rejects null.
+// UnmarshalJSON requires all four policy and label state fields.
 func (v *PolicyVersion) UnmarshalJSON(data []byte) error {
 	var wire policyVersionWire
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	*v = wire.version()
+	version, err := wire.version()
+	if err != nil {
+		return err
+	}
+	*v = version
+	return nil
+}
+
+// UnmarshalJSON validates schema revisions independently of policy generations.
+func (v *SchemaVersion) UnmarshalJSON(data []byte) error {
+	type wireSchema SchemaVersion
+	var wire wireSchema
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	version := SchemaVersion(wire)
+	if err := version.validateResponse("schema version"); err != nil {
+		return err
+	}
+	*v = version
+	return nil
+}
+
+func (v SchemaVersion) validateResponse(field string) error {
+	if v.Hash == "" || v.LoadedAt.IsZero() {
+		return invalidResponse(field + " requires hash and loaded_at")
+	}
 	return nil
 }
 
@@ -68,13 +114,13 @@ func (v *VersionInfo) validateResponse() error {
 	return nil
 }
 
-// UnmarshalJSON requires every field mandated by the v0.0.15 version response.
+// UnmarshalJSON requires every field mandated by the current version response.
 func (v *VersionInfo) UnmarshalJSON(data []byte) error {
 	var wire struct {
 		Version  *string            `json:"version"`
 		Core     *CoreVersion       `json:"core"`
 		Policies *policyVersionWire `json:"policies"`
-		Schema   *policyVersionWire `json:"schema"`
+		Schema   *SchemaVersion     `json:"schema"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -82,12 +128,11 @@ func (v *VersionInfo) UnmarshalJSON(data []byte) error {
 	if wire.Version == nil || wire.Core == nil || wire.Policies == nil {
 		return invalidResponse("version response is missing required fields")
 	}
-	var schema *PolicyVersion
-	if wire.Schema != nil {
-		value := wire.Schema.version()
-		schema = &value
+	policies, err := wire.Policies.version()
+	if err != nil {
+		return err
 	}
-	*v = VersionInfo{Version: *wire.Version, Core: *wire.Core, Policies: wire.Policies.version(), Schema: schema}
+	*v = VersionInfo{Version: *wire.Version, Core: *wire.Core, Policies: policies, Schema: wire.Schema}
 	return v.validateResponse()
 }
 
@@ -113,7 +158,11 @@ func (d *AuthorizeDecisionBrief) UnmarshalJSON(data []byte) error {
 	if wire.Decision == nil || wire.Version == nil || wire.PolicyID == nil {
 		return invalidResponse("brief authorization decision is missing required fields")
 	}
-	*d = AuthorizeDecisionBrief{Decision: *wire.Decision, Version: wire.Version.version(), PolicyID: *wire.PolicyID}
+	version, err := wire.Version.version()
+	if err != nil {
+		return err
+	}
+	*d = AuthorizeDecisionBrief{Decision: *wire.Decision, Version: version, PolicyID: *wire.PolicyID}
 	return nil
 }
 
@@ -131,7 +180,11 @@ func (d *AuthorizeDecisionDetailed) UnmarshalJSON(data []byte) error {
 	if wire.Policies == nil || wire.Decision == nil || wire.Version == nil {
 		return invalidResponse("detailed authorization decision is missing required fields")
 	}
-	*d = AuthorizeDecisionDetailed{Policies: *wire.Policies, Decision: *wire.Decision, Version: wire.Version.version()}
+	version, err := wire.Version.version()
+	if err != nil {
+		return err
+	}
+	*d = AuthorizeDecisionDetailed{Policies: *wire.Policies, Decision: *wire.Decision, Version: version}
 	return nil
 }
 
@@ -150,7 +203,11 @@ func (r *AuthorizeResponse[T]) UnmarshalJSON(data []byte) error {
 	if wire.Results == nil || wire.Version == nil || wire.Successful == nil || wire.Failed == nil {
 		return invalidResponse("authorization response is missing required fields")
 	}
-	*r = AuthorizeResponse[T]{Results: *wire.Results, Version: wire.Version.version(), Successful: *wire.Successful, Failed: *wire.Failed}
+	version, err := wire.Version.version()
+	if err != nil {
+		return err
+	}
+	*r = AuthorizeResponse[T]{Results: *wire.Results, Version: version, Successful: *wire.Successful, Failed: *wire.Failed}
 	return nil
 }
 
@@ -228,8 +285,7 @@ func (b BundleMetadata) validateResponse() error {
 	return nil
 }
 
-// UnmarshalJSON requires the current PoliciesMetadata shape. In v0.0.15 the
-// schema metadata object is present even when its content is empty.
+// UnmarshalJSON requires schema metadata even when its content is empty.
 func (p *PoliciesMetadata) UnmarshalJSON(data []byte) error {
 	var wire struct {
 		AllowUpload          *bool           `json:"allow_upload"`
@@ -247,13 +303,13 @@ func (p *PoliciesMetadata) UnmarshalJSON(data []byte) error {
 	}
 	*p = PoliciesMetadata{
 		AllowUpload: *wire.AllowUpload, SchemaValidationMode: *wire.SchemaValidationMode,
-		Policies: *wire.Policies, Labels: *wire.Labels, Schema: wire.Schema, Bundle: wire.Bundle,
+		Policies: *wire.Policies, Labels: *wire.Labels, Schema: *wire.Schema, Bundle: wire.Bundle,
 	}
 	return p.validateResponse()
 }
 
 func (p *PoliciesMetadata) validateResponse() error {
-	if p == nil || p.SchemaValidationMode == "" || p.Schema == nil {
+	if p == nil || p.SchemaValidationMode == "" {
 		return invalidResponse("policy metadata is incomplete")
 	}
 	if err := p.Policies.validateResponse("policies metadata"); err != nil {
@@ -337,29 +393,20 @@ func unmarshalStatusResponse(data []byte, status *StatusResponse) error {
 	if wire.PolicyConfiguration == nil || wire.ParallelConfiguration == nil {
 		return invalidResponse("status response is missing required configuration fields")
 	}
-	limits := legacyRequestLimits()
-	if len(wire.RequestLimits) != 0 {
-		if bytes.Equal(bytes.TrimSpace(wire.RequestLimits), []byte("null")) {
-			return invalidResponse("status request limits must not be null")
-		}
-		var err error
-		limits, err = decodeRequestLimits(wire.RequestLimits)
-		if err != nil {
-			return err
-		}
+	if len(wire.RequestLimits) == 0 || len(wire.RequestContext) == 0 ||
+		bytes.Equal(bytes.TrimSpace(wire.RequestLimits), []byte("null")) ||
+		bytes.Equal(bytes.TrimSpace(wire.RequestContext), []byte("null")) {
+		return invalidResponse("status requires request_limits and request_context objects")
 	}
-	if err := limits.validateResponse(); err != nil {
+	limits, err := decodeRequestLimits(wire.RequestLimits)
+	if err != nil {
 		return err
 	}
-	requestContext := RequestContextStatus{}
-	if len(wire.RequestContext) != 0 {
-		if bytes.Equal(bytes.TrimSpace(wire.RequestContext), []byte("null")) {
-			return invalidResponse("status request context must not be null")
-		}
-		if err := json.Unmarshal(wire.RequestContext, &requestContext); err != nil {
-			return err
-		}
+	var requestContext RequestContextStatus
+	if err := json.Unmarshal(wire.RequestContext, &requestContext); err != nil {
+		return err
 	}
+
 	*status = StatusResponse{
 		PolicyConfiguration:   *wire.PolicyConfiguration,
 		ParallelConfiguration: *wire.ParallelConfiguration,
@@ -378,16 +425,14 @@ func decodeRequestLimits(data []byte) (RequestLimits, error) {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return RequestLimits{}, err
 	}
-	if wire.MaxContextBytes == nil || wire.MaxContextDepth == nil || wire.MaxContextKeys == nil {
+	if wire.MaxBatchSize == nil || wire.MaxContextBytes == nil || wire.MaxContextDepth == nil || wire.MaxContextKeys == nil {
 		return RequestLimits{}, invalidResponse("status request limits are missing required fields")
 	}
 	limits := RequestLimits{
+		MaxBatchSize:    *wire.MaxBatchSize,
 		MaxContextBytes: *wire.MaxContextBytes,
 		MaxContextDepth: *wire.MaxContextDepth,
 		MaxContextKeys:  *wire.MaxContextKeys,
-	}
-	if wire.MaxBatchSize != nil {
-		limits.MaxBatchSize = *wire.MaxBatchSize
 	}
 	return limits, nil
 }

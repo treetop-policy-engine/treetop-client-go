@@ -25,7 +25,7 @@ type PolicyVersion struct {
 	// LabelSet is a stable label configuration identifier when supplied by the server.
 	LabelSet *string `json:"label_set"`
 	// Generation is local to one engine instance and can restart on replacement.
-	// Older servers omit it, which defaults to zero.
+	// Required on the wire, including when its value is zero.
 	Generation uint64 `json:"generation"`
 }
 
@@ -34,6 +34,12 @@ func (v PolicyVersion) equal(other PolicyVersion) bool {
 		v.LabelSet != nil && other.LabelSet != nil && *v.LabelSet == *other.LabelSet
 	return v.Hash == other.Hash && v.LoadedAt.Equal(other.LoadedAt) &&
 		labelsEqual && v.Generation == other.Generation
+}
+
+// SchemaVersion identifies loaded schema content, independently of authorization generations.
+type SchemaVersion struct {
+	Hash     string    `json:"hash"`
+	LoadedAt time.Time `json:"loaded_at"`
 }
 
 // CoreVersion identifies the Treetop core and Cedar engine versions.
@@ -47,7 +53,7 @@ type VersionInfo struct {
 	Version  string         `json:"version"`
 	Core     CoreVersion    `json:"core"`
 	Policies PolicyVersion  `json:"policies"`
-	Schema   *PolicyVersion `json:"schema,omitempty"`
+	Schema   *SchemaVersion `json:"schema,omitempty"`
 }
 
 // PermitPolicy is a matching Cedar permit policy in both text and JSON form.
@@ -341,7 +347,7 @@ func decisionMismatch(index int, message string) error {
 }
 
 // MetadataSource identifies the remote URL from which server state was loaded.
-// It accepts both the current {"url": "..."} shape and legacy string responses.
+// It requires the current {"url": "..."} object shape.
 type MetadataSource struct {
 	URL string `json:"url"`
 }
@@ -355,24 +361,17 @@ func NewMetadataSource(value string) (MetadataSource, error) {
 	return MetadataSource{URL: value}, nil
 }
 
-// UnmarshalJSON supports current and legacy server representations.
+// UnmarshalJSON requires the current object representation and a valid URL.
 func (s *MetadataSource) UnmarshalJSON(data []byte) error {
 	var object struct {
 		URL string `json:"url"`
 	}
-	if err := json.Unmarshal(data, &object); err == nil && object.URL != "" {
-		validated, err := NewMetadataSource(object.URL)
-		if err != nil {
-			return err
-		}
-		*s = validated
-		return nil
-	}
-	var legacy string
-	if err := json.Unmarshal(data, &legacy); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&object); err != nil {
 		return err
 	}
-	validated, err := NewMetadataSource(legacy)
+	validated, err := NewMetadataSource(object.URL)
 	if err != nil {
 		return err
 	}
@@ -411,7 +410,7 @@ type PoliciesMetadata struct {
 	SchemaValidationMode string          `json:"schema_validation_mode"`
 	Policies             Metadata        `json:"policies"`
 	Labels               Metadata        `json:"labels"`
-	Schema               *Metadata       `json:"schema,omitempty"`
+	Schema               Metadata        `json:"schema"`
 	Bundle               *BundleMetadata `json:"bundle,omitempty"`
 }
 
@@ -425,10 +424,10 @@ type SchemaDownload struct {
 	Schema Metadata `json:"schema"`
 }
 
-// RequestLimits are enforced locally for authorization contexts. A zero
-// MaxBatchSize means the target server's batch limit is unknown.
+// RequestLimits are enforced locally. MaxBatchSize is an explicit limit; zero
+// rejects every nonempty batch.
 type RequestLimits struct {
-	MaxBatchSize    int   `json:"max_batch_size,omitempty"`
+	MaxBatchSize    int   `json:"max_batch_size"`
 	MaxContextBytes int64 `json:"max_context_bytes"`
 	MaxContextDepth int   `json:"max_context_depth"`
 	MaxContextKeys  int   `json:"max_context_keys"`
@@ -439,13 +438,9 @@ func DefaultRequestLimits() RequestLimits {
 	return RequestLimits{MaxBatchSize: 1024, MaxContextBytes: 16 << 10, MaxContextDepth: 8, MaxContextKeys: 64}
 }
 
-func legacyRequestLimits() RequestLimits {
-	return RequestLimits{MaxContextBytes: 16 << 10, MaxContextDepth: 8, MaxContextKeys: 64}
-}
-
 func (l RequestLimits) validate() error {
 	if l.MaxBatchSize < 0 || l.MaxContextBytes <= 0 || l.MaxContextDepth <= 0 || l.MaxContextKeys <= 0 {
-		return &ConfigurationError{Message: "request limits must be positive; max batch size may be zero when unknown"}
+		return &ConfigurationError{Message: "context limits must be positive and max batch size must be nonnegative"}
 	}
 	return nil
 }
@@ -485,8 +480,7 @@ type StatusResponse struct {
 	RequestContext        RequestContextStatus  `json:"request_context"`
 }
 
-// UnmarshalJSON applies safe legacy defaults for fields omitted by older
-// compatible servers.
+// UnmarshalJSON requires the complete current server status.
 func (s *StatusResponse) UnmarshalJSON(data []byte) error {
 	return unmarshalStatusResponse(data, s)
 }

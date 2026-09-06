@@ -247,7 +247,7 @@ func (r *AuthorizeRequest) Validate() error {
 }
 
 func (r *AuthorizeRequest) validateLimits(limits RequestLimits) error {
-	if limits.MaxBatchSize > 0 && len(r.requests) > limits.MaxBatchSize {
+	if len(r.requests) > limits.MaxBatchSize {
 		return &ValidationError{Field: "authorization batch", Value: fmt.Sprint(len(r.requests)), Rule: fmt.Sprintf("contains more than %d requests", limits.MaxBatchSize)}
 	}
 	for i, request := range r.requests {

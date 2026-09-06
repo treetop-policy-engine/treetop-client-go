@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestTreetopContainerCompatibility(t *testing.T) {
+func TestTreetopCurrentContract(t *testing.T) {
 	baseURL := integrationEnv(t, "TREETOP_E2E_URL")
 	accessValue := integrationEnv(t, "TREETOP_E2E_ACCESS_TOKEN")
 	uploadValue := integrationEnv(t, "TREETOP_E2E_UPLOAD_TOKEN")

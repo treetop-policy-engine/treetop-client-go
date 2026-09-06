@@ -15,14 +15,14 @@ func TestReadEndpointsAndDetailedAuthorization(t *testing.T) {
 		response.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/api/v1/version":
-			_, _ = io.WriteString(response, `{"version":"0.0.15","core":{"version":"0.1.0","cedar":"4.4.2"},"policies":{"hash":"abc","loaded_at":"`+testLoadedAt+`"},"schema":{"hash":"def","loaded_at":"`+testLoadedAt+`"}}`)
+			_, _ = io.WriteString(response, `{"version":"0.1.0","core":{"version":"0.1.0","cedar":"4.4.2"},"policies":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0},"schema":{"hash":"def","loaded_at":"`+testLoadedAt+`"}}`)
 		case "/api/v1/status":
 			_, _ = io.WriteString(response, `{
 				"policy_configuration":{"allow_upload":true,"schema_validation_mode":"strict",
 				"policies":{"timestamp":"`+testLoadedAt+`","sha256":"abc","size":10,"entries":1,"content":"permit();"},
 				"labels":{"timestamp":"`+testLoadedAt+`","sha256":"def","size":2,"entries":0,"content":"{}"},
 				"schema":{"timestamp":"`+testLoadedAt+`","sha256":"ghi","size":2,"entries":1,"content":"{}"},
-				"bundle":{"format_version":1,"bundle_id":"bundle","archive_sha256":"sum","compressed_size":12,"module_count":2,"signed":true,"signing_key_id":"key-1","loaded_at":"`+testLoadedAt+`"}},
+				"bundle":{"format_version":2,"bundle_id":"bundle","archive_sha256":"sum","compressed_size":12,"module_count":2,"signed":true,"signing_key_id":"key-1","loaded_at":"`+testLoadedAt+`"}},
 				"parallel_configuration":{"cpu_count":8,"workers":4,"rayon_threads":4,"par_threshold":8,"allow_parallel":true},
 				"request_limits":{"max_batch_size":1024,"max_context_bytes":16384,"max_context_depth":8,"max_context_keys":64},
 				"request_context":{"supported":true,"schema_backed":true}}`)
@@ -52,8 +52,8 @@ func TestReadEndpointsAndDetailedAuthorization(t *testing.T) {
 				t.Errorf("detail = %q", request.URL.Query().Get("detail"))
 			}
 			_, _ = io.WriteString(response, `{
-				"results":[{"index":0,"status":"success","result":{"decision":"Allow","policy":[{"literal":"permit();","json":{"effect":"permit"},"cedar_id":"policy0"}],"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`"}}}],
-				"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`"},"successful":1,"failed":0}`)
+				"results":[{"index":0,"status":"success","result":{"decision":"Allow","policy":[{"literal":"permit();","json":{"effect":"permit"},"cedar_id":"policy0"}],"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0}}}],
+				"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0},"successful":1,"failed":0}`)
 		default:
 			http.NotFound(response, request)
 		}
@@ -65,7 +65,7 @@ func TestReadEndpointsAndDetailedAuthorization(t *testing.T) {
 	}
 	ctx := context.Background()
 	version, err := client.Version(ctx)
-	if err != nil || version.Version != "0.0.15" || version.Schema == nil {
+	if err != nil || version.Version != "0.1.0" || version.Schema == nil {
 		t.Fatalf("Version: %#v, %v", version, err)
 	}
 	status, err := client.Status(ctx)
@@ -162,7 +162,7 @@ func TestAllUploadRepresentations(t *testing.T) {
 
 func TestIsAllowedReturnsEvaluationError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(response, `{"results":[{"index":0,"status":"failed","error":"invalid entity"}],"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`"},"successful":0,"failed":1}`)
+		_, _ = io.WriteString(response, `{"results":[{"index":0,"status":"failed","error":"invalid entity"}],"version":{"hash":"abc","loaded_at":"`+testLoadedAt+`","label_set":null,"generation":0},"successful":0,"failed":1}`)
 	}))
 	defer server.Close()
 	client, err := New(server.URL)
