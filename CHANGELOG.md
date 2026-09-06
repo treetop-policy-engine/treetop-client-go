@@ -16,6 +16,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Update unkeyed struct literals to include the new fields, or use keyed literals.
 - Reject brief and detailed batches whose item versions differ only in label configuration
   or generation. Label identifiers compare by string value, including across separate allocations.
+- Reject an explicit null generation rather than treating it as an omitted legacy field.
 
 ## [0.2.0] - 2026-09-03
 

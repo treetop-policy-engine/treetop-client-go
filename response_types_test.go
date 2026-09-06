@@ -115,14 +115,25 @@ func TestDetailedResponseRequiresPolicyJSONObject(t *testing.T) {
 }
 
 func TestPolicyVersionMetadataRoundTripAndLegacyDefaults(t *testing.T) {
-	for _, extra := range []string{"", `,"label_set":null,"generation":0`, `,"label_set":"labels-v2","generation":18446744073709551615`} {
-		input := `{"hash":"abc","loaded_at":"` + testLoadedAt + `"` + extra + `}`
+	for _, test := range []struct {
+		extra      string
+		generation uint64
+		labels     string
+	}{
+		{"", 0, ""},
+		{`,"label_set":null,"generation":0`, 0, ""},
+		{`,"label_set":"labels-v2","generation":18446744073709551615`, ^uint64(0), "labels-v2"},
+	} {
+		input := `{"hash":"abc","loaded_at":"` + testLoadedAt + `"` + test.extra + `}`
 		var version PolicyVersion
 		if err := json.Unmarshal([]byte(input), &version); err != nil {
 			t.Fatal(err)
 		}
-		if extra == "" && (version.LabelSet != nil || version.Generation != 0) {
-			t.Fatal("incorrect legacy defaults")
+		if version.Generation != test.generation {
+			t.Fatalf("got generation %d, want %d", version.Generation, test.generation)
+		}
+		if test.labels == "" && version.LabelSet != nil || test.labels != "" && (version.LabelSet == nil || *version.LabelSet != test.labels) {
+			t.Fatal("incorrect label identifier")
 		}
 		encoded, err := json.Marshal(version)
 		if err != nil {
@@ -139,7 +150,7 @@ func TestPolicyVersionMetadataRoundTripAndLegacyDefaults(t *testing.T) {
 }
 
 func TestPolicyVersionRejectsInvalidGeneration(t *testing.T) {
-	for _, generation := range []string{"-1", "18446744073709551616", "true", "1.5", `"1"`} {
+	for _, generation := range []string{"null", "-1", "18446744073709551616", "true", "false", "1.5", "1e3", `"1"`} {
 		var version PolicyVersion
 		if err := json.Unmarshal([]byte(`{"generation":`+generation+`}`), &version); err == nil {
 			t.Errorf("accepted generation %s", generation)
@@ -180,5 +191,21 @@ func TestBatchesCompareCompletePolicyVersion(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBatchesRejectNullGeneration(t *testing.T) {
+	validVersion := `{"hash":"abc","loaded_at":"` + testLoadedAt + `","generation":0}`
+	nullVersion := `{"hash":"abc","loaded_at":"` + testLoadedAt + `","generation":null}`
+	for _, versions := range [][2]string{{nullVersion, validVersion}, {validVersion, nullVersion}} {
+		input := `{"results":[{"index":0,"status":"success","result":{"decision":"Deny","policy":[],"policy_id":"","version":` + versions[0] + `}}],"version":` + versions[1] + `,"successful":1,"failed":0}`
+		var brief AuthorizeBriefResponse
+		var detailed AuthorizeDetailedResponse
+		for _, err := range []error{json.Unmarshal([]byte(input), &brief), json.Unmarshal([]byte(input), &detailed)} {
+			var invalid *InvalidResponseError
+			if !errors.As(err, &invalid) {
+				t.Fatalf("expected invalid generation, got %v", err)
+			}
+		}
 	}
 }

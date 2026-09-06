@@ -317,12 +317,13 @@ if errors.As(err, &apiError) {
 
 See [docs/api.md](docs/api.md) for the endpoint and wire-format reference.
 
-## License
-
-MIT
-
-### Authorization state versions
+## Authorization state versions
 
 `PolicyVersion` retains the policy hash, load time, nullable `LabelSet`, and `Generation`.
 Generation is local to one engine instance and can restart when that engine is replaced.
 Older responses default the new fields to `nil` and `0`. Batch validation compares all four fields.
+An explicit null generation is invalid; only an omitted generation defaults to zero.
+
+## License
+
+MIT

@@ -7,7 +7,8 @@ The client is tested against REST v0.0.15 and v0.0.16. In v0.0.16, `PolicyVersio
 includes nullable `label_set` and unsigned 64-bit `generation` alongside `hash` and
 `loaded_at`. Older responses default the added fields to `nil` and `0`. Brief and
 detailed batches must agree on every version field; label identifiers compare by
-string value, including across separate allocations.
+string value, including across separate allocations. An explicit null generation is invalid;
+only an omitted generation defaults to zero.
 
 ## Endpoint mapping
 
