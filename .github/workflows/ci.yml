@@ -40,9 +40,9 @@ jobs:
       - run: git diff --exit-code
       - run: go vet ./...
       - run: go test -race -cover ./...
-      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
       - run: govulncheck ./...
-      - run: npx --yes markdownlint-cli2@0.20.0 --config .markdownlint.json "**/*.md"
+      - run: npx --yes markdownlint-cli2@0.23.2 --config .markdownlint.json "**/*.md"
 
   container-e2e:
     name: Current REST 0.1.0 release E2E
