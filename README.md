@@ -3,7 +3,7 @@
 An idiomatic Go client for [Treetop REST](https://github.com/treetop-policy-engine/treetop-rest),
 the Cedar-based policy authorization service.
 
-Go client 0.3.0 targets the strict Treetop REST 0.1.0 contract using only the Go
+Go client 0.3.1 targets the strict Treetop REST 0.2.0 contract using only the Go
 standard library. This is a breaking release; see [MIGRATION.md](MIGRATION.md).
 
 ## Current contract
@@ -35,7 +35,7 @@ removed; malformed authorization responses fail closed.
 go get github.com/treetop-policy-engine/treetop-client-go
 ```
 
-The v0.2.x module line declares Go 1.25.13 as its minimum version so supported builds contain
+The v0.3.x module line declares Go 1.25.13 as its minimum version so supported builds contain
 the standard-library security fixes required by its HTTP and TLS call paths.
 
 ## Quick start

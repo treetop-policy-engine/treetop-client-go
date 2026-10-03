@@ -3,7 +3,7 @@
 Treetop application endpoints are rooted at `/api/v1`. Operational endpoints are relative to the
 configured base URL path.
 
-The client targets REST 0.1.0. `PolicyVersion` requires `hash`, `loaded_at`,
+The client targets REST 0.2.0. `PolicyVersion` requires `hash`, `loaded_at`,
 nullable `label_set`, and unsigned 64-bit `generation`. Omitted fields and null
 generations are invalid. Brief and detailed batch items must agree on every
 version field. Schema revisions use the distinct `SchemaVersion` type with
