@@ -8,7 +8,7 @@ standard library. This is a breaking release; see [MIGRATION.md](MIGRATION.md).
 
 ## Current contract
 
-CI tests Go 1.25.13 and current stable Go, then uses an immutable REST release image
+CI tests Go 1.25.14 and current stable Go, then uses an immutable REST release image
 and runs authenticated integration tests against it. Early releases prioritize
 correctness over compatibility. Old response defaults and legacy aliases are
 removed; malformed authorization responses fail closed.
@@ -35,7 +35,7 @@ removed; malformed authorization responses fail closed.
 go get github.com/treetop-policy-engine/treetop-client-go
 ```
 
-The v0.3.x module line declares Go 1.25.13 as its minimum version so supported builds contain
+The module declares Go 1.25.14 as its minimum version so supported builds contain
 the standard-library security fixes required by its HTTP and TLS call paths.
 
 ## Quick start
