@@ -1,5 +1,9 @@
 # Migration guide
 
+## Unreleased
+
+Update to Go 1.25.14 or later before building the client.
+
 ## Go client 0.3.1 with REST 0.2.0
 
 Upgrade with `go get github.com/treetop-policy-engine/treetop-client-go@v0.3.1`.
