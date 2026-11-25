@@ -45,13 +45,13 @@ jobs:
       - run: npx --yes markdownlint-cli2@0.24.2 --config .markdownlint.json "**/*.md"
 
   container-e2e:
-    name: Current REST 0.2.0 release E2E
+    name: Current REST 0.3.0 release E2E
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       TREETOP_E2E_CONTAINER: treetop-client-go-e2e
-      TREETOP_E2E_VERSION: 0.2.0
-      TREETOP_E2E_IMAGE: ghcr.io/treetop-policy-engine/treetop-rest@sha256:e29baeb5b498f21c72dccd9d08ab43198fa4705cecb40643d0ee97b63cc1c932
+      TREETOP_E2E_VERSION: 0.3.0
+      TREETOP_E2E_IMAGE: ghcr.io/treetop-policy-engine/treetop-rest@sha256:69d8cde73510f0219a0359f5baa5cf049f98b8eab87148540e72ac385725c772
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
