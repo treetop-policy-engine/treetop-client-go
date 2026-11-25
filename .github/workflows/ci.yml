@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.25.14", stable]
+        go-version: ["1.26.11", stable]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
@@ -42,7 +42,7 @@ jobs:
       - run: go test -race -cover ./...
       - run: go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
       - run: govulncheck ./...
-      - run: npx --yes markdownlint-cli2@0.24.1 --config .markdownlint.json "**/*.md"
+      - run: npx --yes markdownlint-cli2@0.24.2 --config .markdownlint.json "**/*.md"
 
   container-e2e:
     name: Current REST 0.2.0 release E2E
@@ -56,7 +56,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version: "1.25.14"
+          go-version: "1.26.11"
           check-latest: true
       - name: Pull verified REST release image
         run: docker pull "$TREETOP_E2E_IMAGE"

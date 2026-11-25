@@ -7,9 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed
+### Security
 
-- Raise the minimum Go version to 1.25.14 for standard-library fixes. Update the Go toolchain before building.
+- Raise the minimum Go version to 1.26.11 for the net/http fix in GO-2026-6859.
+  Go 1.27 users must update to 1.27.4 or later and rebuild their binaries.
 
 ## [0.3.1] - 2026-10-03
 
