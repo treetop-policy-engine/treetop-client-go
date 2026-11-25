@@ -1,6 +1,9 @@
 # Migration guide
 
-## Unreleased
+## Go client 0.4.0 with REST 0.3.0
+
+Upgrade with `go get github.com/treetop-policy-engine/treetop-client-go@v0.4.0`.
+Rebuild and re-sign server policy archives with Bundle CLI 0.4.0 before upgrading REST.
 
 Build with Go 1.26.11 or later in the 1.26 series, or with Go 1.27.4 or later.
 Earlier toolchains lack the net/http fix in GO-2026-6859.
