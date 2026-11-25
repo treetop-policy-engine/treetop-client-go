@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-Update to Go 1.25.14 or later before building the client.
+Build with Go 1.26.11 or later in the 1.26 series, or with Go 1.27.4 or later.
+Earlier toolchains lack the net/http fix in GO-2026-6859.
 
 ## Go client 0.3.1 with REST 0.2.0
 
